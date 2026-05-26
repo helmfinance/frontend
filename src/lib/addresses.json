@@ -1,0 +1,36 @@
+{
+  "chain": {
+    "name": "Mantle Sepolia",
+    "id": 5003,
+    "nativeCurrency": { "name": "MNT", "symbol": "MNT", "decimals": 18 },
+    "rpcUrl": "https://rpc.sepolia.mantle.xyz",
+    "explorerUrl": "https://explorer.sepolia.mantle.xyz",
+    "faucetUrl": "https://faucet.sepolia.mantle.xyz"
+  },
+  "contracts": {
+    "registry":         "0x069719287B7234f9B005Be16766702dD53047b84",
+    "agentNFT":         "0x5099bd07CEFf8B0Eb9824F0BCa52293F4b8eb2C1",
+    "distributor":      "0xc0F99830BE04835B97F07BA927589FE1c2cCbd50",
+    "redemptionQueue":  "0xECed7c86B3c3848f853B43519a080FB3e6815A4e",
+    "treasury":         "0x4A19662901Cd6326fB0052BCDfbfD5b504eFd3B5",
+    "harvester":        "0x5486eD748244f0823d48D71268Fd92735eb356d1",
+    "pythAdapter":      "0xe666D9e73E9AF83B0e0d21B03126661Eb1B8cB9e",
+    "timeProvider":     "0x0A7aeB1c658A672C6794C36818dFFEe4bAcB082F",
+    "mEthAdapter":      "0x8ae0c4B70a90406bb593457751029379E1779f6B",
+    "usdyAdapter":      "0x025f9E23C5a3962505Bb580009b0c47c820dd241",
+    "usdc":             "0x468dAe9a460ABAb95e950d6113F199A6a0123906",
+    "agentTokenImpl":   "0x0631DfBcaA33306Ef93d21EcF8B81541bAb211D9",
+    "agentVaultImpl":   "0x95b7afc8f5e0C03847913bA1704de25a442a03d2",
+    "founderVaultImpl": "0xDFA6e85654D062AD656696E91bd579803000FE22"
+  },
+  "syntheticAssets": {
+    "sNVDA": "0xEc7D5CEFFCD2242Ca95349624bCDBE0D895c8B5f",
+    "sSPY":  "0x119fc91D7BFb14BA68924e48445fF3C0DD62C63f",
+    "sAAPL": "0xA47224ED4ab2a8F89F5d13EBAb7832040274D82b",
+    "sTSLA": "0x18bfBe3Ff72dA0B3dfC6574762AC617A5F6c5533",
+    "sMSFT": "0x2D5Dcbe20C21b34dBf6556411A1a19593e4ccbD9"
+  },
+  "externalContracts": {
+    "pyth": "0x98046Bd286715D3B0BC227Dd7a956b83D8978603"
+  }
+}

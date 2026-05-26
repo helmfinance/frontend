@@ -1,0 +1,336 @@
+@import "tailwindcss";
+
+/* Tailwind v4 dark mode → data-theme="dark" on <html> */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ============================================
+   Helm — Design Tokens (Phase A + B)
+   Light canvas = transactional (primary).
+   Dark canvas = optional via [data-theme="dark"].
+   ============================================ */
+
+:root {
+  /* Surfaces */
+  --canvas-light: #ffffff;
+  --canvas-cream: #fbfbf5;
+  --canvas-soft:  #f7f7f2;
+  --canvas-night: #000000;
+  --canvas-night-elevated: #0a0a0a;
+  --surface-elevated-dark: #1e2c31;
+
+  /* Hairlines */
+  --hairline-light: #e4e4e7;
+  --hairline-soft:  #ececef;
+  --hairline-dark:  #1e2c31;
+
+  /* Shade ladder */
+  --shade-30: #d4d4d8;
+  --shade-40: #a1a1aa;
+  --shade-50: #71717a;
+  --shade-60: #52525b;
+  --shade-70: #3f3f46;
+
+  /* Text */
+  --ink: #000000;
+  --on-primary: #ffffff;
+
+  /* Brand accents — light track only */
+  --aloe-10: #c1fbd4;
+  --aloe-12: #abf3c3;
+  --pistachio-10: #d4f9e0;
+  --pistachio-12: #c2f4d2;
+
+  /* Cool link tones (dark surfaces) */
+  --link-cool-1: #9dabad;
+  --link-cool-2: #9797a2;
+  --link-cool-3: #bdbdca;
+  --link-mint:   #99b3ad;
+
+  /* Semantic — phase + decision + performance */
+  --amber:    #f59e0b;
+  --amber-bg: #fef3c7;
+  --emerald:  #059669;
+  --emerald-bg: #d1fae5;
+  --orange:   #ea580c;
+  --orange-bg: #ffedd5;
+  --red:      #dc2626;
+  --red-bg:   #fee2e2;
+  --zinc-helm:#71717a;
+  --zinc-bg:  #f4f4f5;
+  --blue:     #2563eb;
+  --blue-bg:  #dbeafe;
+  --violet:   #7c3aed;
+  --violet-bg:#ede9fe;
+
+  /* Spacing */
+  --xxs: 2px;
+  --xs:  4px;
+  --sm:  8px;
+  --md:  12px;
+  --lg:  16px;
+  --xl:  24px;
+  --xxl: 32px;
+  --huge: 64px;
+
+  /* Radius */
+  --r-xs:  4px;
+  --r-sm:  5px;
+  --r-md:  8px;
+  --r-lg:  12px;
+  --r-xl:  20px;
+  --r-pill: 9999px;
+
+  /* Elevation */
+  --elev-2: 0 0 0 1px rgba(255,255,255,0.08), 0 1px 3px rgba(0,0,0,0.3), 0 5px 10px rgba(0,0,0,0.2);
+  --elev-3: 0 8px 8px rgba(0,0,0,0.04), 0 4px 4px rgba(0,0,0,0.04),
+            0 2px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.06);
+  --elev-4: 0 25px 50px -12px rgba(0,0,0,0.25);
+
+  /* Type families — display is system Helvetica.
+     UI / mono CSS vars are injected by next/font in layout.tsx. */
+  --font-display: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+
+  /* Phase badge text colors (light) */
+  --phase-incubation-text: #92400e;
+  --phase-public-text:     #065f46;
+  --phase-winddown-text:   #9a3412;
+  --phase-slashed-text:    #991b1b;
+  --phase-settled-text:    var(--shade-60);
+
+  /* Decision tag text colors (light) */
+  --dec-rebalance-text:  #1e40af;
+  --dec-harvest-text:    #065f46;
+  --dec-distribute-text: #5b21b6;
+  --dec-winddown-text:   #9a3412;
+
+  /* Wind-down banner colors */
+  --wd-text:     #7c2d12;
+  --wd-sub:      rgba(124, 45, 18, 0.78);
+  --wd-border:   color-mix(in srgb, var(--orange) 30%, transparent);
+
+  /* Pistachio card text (used by Mandate + Incubation cards) */
+  --pistachio-text-strong: rgba(0, 0, 0, 0.85);
+  --pistachio-text-medium: rgba(0, 0, 0, 0.65);
+  --pistachio-text-soft:   rgba(0, 0, 0, 0.5);
+  --pistachio-divider:     rgba(0, 0, 0, 0.10);
+}
+
+/* Dark theme override (toggle via root attribute) */
+html[data-theme="dark"] {
+  --canvas-light: #0a0a0a;
+  --canvas-cream: #0f0f10;
+  --canvas-soft:  #141416;
+  --hairline-light: #27272a;
+  --hairline-soft:  #1f1f22;
+  --ink: #fafafa;
+  --on-primary: #000000;
+  --shade-30: #3f3f46;
+  --shade-40: #52525b;
+  --shade-50: #a1a1aa;
+  --shade-60: #d4d4d8;
+  --shade-70: #f4f4f5;
+  --amber-bg: #3a2a06;
+  --emerald-bg: #062e22;
+  --orange-bg: #3a1d05;
+  --red-bg: #3a0a0a;
+  --zinc-bg: #1a1a1d;
+  --blue-bg: #0b1c3a;
+  --violet-bg: #1c0e3a;
+  --aloe-10: #1a4a32;
+  --aloe-12: #1f5a3c;
+  --pistachio-10: #103a26;
+  --pistachio-12: #144a32;
+  --elev-3: 0 8px 8px rgba(0,0,0,0.3), 0 4px 4px rgba(0,0,0,0.25),
+            0 2px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.06);
+
+  /* Phase + decision text colors override in dark */
+  --phase-incubation-text: #fcd34d;
+  --phase-public-text:     #6ee7b7;
+  --phase-winddown-text:   #fdba74;
+  --phase-slashed-text:    #fca5a5;
+
+  --dec-rebalance-text:  #93c5fd;
+  --dec-harvest-text:    #6ee7b7;
+  --dec-distribute-text: #c4b5fd;
+  --dec-winddown-text:   #fdba74;
+
+  /* Wind-down banner — dark */
+  --wd-text:     #fed7aa;
+  --wd-sub:      rgba(254, 215, 170, 0.7);
+  --wd-border:   color-mix(in srgb, var(--orange) 40%, transparent);
+
+  /* Pistachio card text — dark */
+  --pistachio-text-strong: rgba(255, 255, 255, 0.92);
+  --pistachio-text-medium: rgba(255, 255, 255, 0.7);
+  --pistachio-text-soft:   rgba(255, 255, 255, 0.5);
+  --pistachio-divider:     rgba(255, 255, 255, 0.12);
+}
+
+/* ============================================
+   Tailwind v4 theme extension — exposes tokens
+   as utility classes (bg-canvas-cream, text-ink, etc.)
+   ============================================ */
+@theme inline {
+  /* Surfaces */
+  --color-canvas-light: var(--canvas-light);
+  --color-canvas-cream: var(--canvas-cream);
+  --color-canvas-soft: var(--canvas-soft);
+  --color-canvas-night: var(--canvas-night);
+
+  /* Hairlines */
+  --color-hairline-light: var(--hairline-light);
+  --color-hairline-soft: var(--hairline-soft);
+
+  /* Shade ladder */
+  --color-shade-30: var(--shade-30);
+  --color-shade-40: var(--shade-40);
+  --color-shade-50: var(--shade-50);
+  --color-shade-60: var(--shade-60);
+  --color-shade-70: var(--shade-70);
+
+  /* Text */
+  --color-ink: var(--ink);
+  --color-on-primary: var(--on-primary);
+
+  /* Brand */
+  --color-aloe: var(--aloe-10);
+  --color-aloe-hover: var(--aloe-12);
+  --color-pistachio: var(--pistachio-10);
+  --color-pistachio-hover: var(--pistachio-12);
+
+  /* Semantic (suffix -helm to avoid clashing with Tailwind defaults) */
+  --color-amber-helm: var(--amber);
+  --color-amber-bg: var(--amber-bg);
+  --color-emerald-helm: var(--emerald);
+  --color-emerald-bg: var(--emerald-bg);
+  --color-orange-helm: var(--orange);
+  --color-orange-bg: var(--orange-bg);
+  --color-red-helm: var(--red);
+  --color-red-bg: var(--red-bg);
+  --color-zinc-helm: var(--zinc-helm);
+  --color-zinc-bg: var(--zinc-bg);
+  --color-blue-helm: var(--blue);
+  --color-blue-bg: var(--blue-bg);
+  --color-violet-helm: var(--violet);
+  --color-violet-bg: var(--violet-bg);
+
+  /* Phase badge text colors */
+  --color-phase-incubation: var(--phase-incubation-text);
+  --color-phase-public:     var(--phase-public-text);
+  --color-phase-winddown:   var(--phase-winddown-text);
+  --color-phase-slashed:    var(--phase-slashed-text);
+  --color-phase-settled:    var(--phase-settled-text);
+
+  /* Decision tag text colors */
+  --color-dec-rebalance:  var(--dec-rebalance-text);
+  --color-dec-harvest:    var(--dec-harvest-text);
+  --color-dec-distribute: var(--dec-distribute-text);
+  --color-dec-winddown:   var(--dec-winddown-text);
+
+  /* Box shadows */
+  --shadow-helm-halo: var(--elev-3);
+  --shadow-helm-modal: var(--elev-4);
+
+  /* Fonts — next/font CSS vars resolved at runtime */
+  --font-display: var(--font-display);
+  --font-ui: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ============================================
+   Base reset + body
+   ============================================ */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--canvas-cream);
+  color: var(--ink);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-feature-settings: "ss03", "cv11", "tnum" 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* ============================================
+   Mono / tabular utility
+   ============================================ */
+.num, .mono {
+  font-family: var(--font-geist-mono), ui-monospace, 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Typography utility classes (semantic scale)
+   Match the design ref's display/heading/body/eyebrow ladder.
+   ============================================ */
+.display-xxl { font-family: var(--font-display); font-size: 96px; font-weight: 300; line-height: 1.0;  letter-spacing: 0.024em; }
+.display-xl  { font-family: var(--font-display); font-size: 70px; font-weight: 300; line-height: 1.0; }
+.display-lg  { font-family: var(--font-display); font-size: 55px; font-weight: 300; line-height: 1.16; }
+.display-md  { font-family: var(--font-display); font-size: 48px; font-weight: 300; line-height: 1.14; }
+.display-sm  { font-family: var(--font-display); font-size: 36px; font-weight: 300; line-height: 1.16; }
+
+.heading-xl  { font-family: var(--font-inter); font-size: 28px; font-weight: 500; line-height: 1.28; letter-spacing: 0.015em; }
+.heading-lg  { font-family: var(--font-inter); font-size: 24px; font-weight: 400; line-height: 1.2;  letter-spacing: 0.015em; }
+.heading-md  { font-family: var(--font-inter); font-size: 20px; font-weight: 500; line-height: 1.4;  letter-spacing: 0.015em; }
+.heading-sm  { font-family: var(--font-inter); font-size: 18px; font-weight: 500; line-height: 1.25; letter-spacing: 0.04em;  }
+
+.body-lg     { font-family: var(--font-inter); font-size: 18px; font-weight: 550; line-height: 1.56; }
+.body-md     { font-family: var(--font-inter); font-size: 16px; font-weight: 420; line-height: 1.5; }
+.body-strong { font-family: var(--font-inter); font-size: 16px; font-weight: 550; line-height: 1.5; }
+.body-sm     { font-family: var(--font-inter); font-size: 14px; font-weight: 420; line-height: 1.5; }
+
+.caption     { font-family: var(--font-inter); font-size: 14px; font-weight: 500; line-height: 1.49; letter-spacing: 0.02em; }
+.micro       { font-family: var(--font-inter); font-size: 13px; font-weight: 500; line-height: 1.5;  letter-spacing: -0.01em; }
+.eyebrow     {
+  font-family: var(--font-inter);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--shade-50);
+}
+.spec-eyebrow {
+  font-family: var(--font-inter);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--shade-50);
+}
+
+/* Common text-color helpers (parallel to Tailwind text-*) */
+.text-ink     { color: var(--ink); }
+.text-muted   { color: var(--shade-50); }
+.text-faint   { color: var(--shade-40); }
+.text-emerald-helm { color: var(--emerald); }
+.text-red-helm     { color: var(--red); }
+.text-amber-helm   { color: var(--amber); }
+.text-orange-helm  { color: var(--orange); }
+
+/* ============================================
+   Animation keyframes (modal, toast, stepper spinner)
+   ============================================ */
+@keyframes helm-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes helm-modal-rise {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: none;             opacity: 1; }
+}
+@keyframes helm-toast-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: none;            opacity: 1; }
+}
+@keyframes helm-spin {
+  to { transform: rotate(360deg); }
+}
