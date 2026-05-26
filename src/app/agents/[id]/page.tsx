@@ -294,7 +294,10 @@ export default function AgentDetailPage() {
 
           {/* Decisions (paginated) */}
           <Section title="Decision log">
-            <PaginatedDecisionList agentId={data.agentId} />
+            <PaginatedDecisionList
+              agentId={data.agentId}
+              fallback={data.recentDecisions ?? []}
+            />
           </Section>
         </div>
 
@@ -1080,9 +1083,15 @@ function BenchKpi({
   );
 }
 
-/* ─────────── Decision log (paginated) ─────────── */
+/* ─────────── Decision log (paginated + fallback) ─────────── */
 
-function PaginatedDecisionList({ agentId }: { agentId: number }) {
+function PaginatedDecisionList({
+  agentId,
+  fallback,
+}: {
+  agentId: number;
+  fallback: Decision[];
+}) {
   const [offset, setOffset] = useState(0);
 
   const { data, isLoading, isError, isFetching } = useQuery({
@@ -1093,6 +1102,7 @@ function PaginatedDecisionList({ agentId }: { agentId: number }) {
         query: { limit: DECISIONS_PAGE_SIZE, offset },
       }) as Promise<DecisionPage>,
     staleTime: 15_000,
+    retry: false,
   });
 
   if (isLoading) {
@@ -1107,13 +1117,28 @@ function PaginatedDecisionList({ agentId }: { agentId: number }) {
       </div>
     );
   }
+
+  // /decisions is currently a schema-only stub on the BE (returns HTTP 501).
+  // Fall back to the recentDecisions slice embedded in the agent detail —
+  // smaller but real data, so the section still tells the story.
   if (isError || !data) {
+    if (fallback.length === 0) {
+      return (
+        <p className="text-[13.5px] text-shade-50">
+          No recorded decisions yet.
+        </p>
+      );
+    }
     return (
-      <p className="text-[13.5px] text-shade-50">
-        Failed to load decision history.
-      </p>
+      <>
+        <p className="text-[12px] text-shade-50 mb-3">
+          Showing {fallback.length} recent decision{fallback.length === 1 ? "" : "s"} · pagination coming once BE indexer exposes the full log.
+        </p>
+        <DecisionRows decisions={fallback} />
+      </>
     );
   }
+
   if (data.items.length === 0) {
     return (
       <p className="text-[13.5px] text-shade-50">
@@ -1129,32 +1154,7 @@ function PaginatedDecisionList({ agentId }: { agentId: number }) {
 
   return (
     <>
-      <div className="flex flex-col">
-        {data.items.map((d: Decision) => (
-          <div
-            key={d.id}
-            className="grid grid-cols-[100px_1fr_auto] gap-4 items-start py-4 border-b border-hairline-soft last:border-b-0"
-          >
-            <span className="mono text-[12px] text-shade-50">
-              {formatRelative(d.timestamp)}
-            </span>
-            <div className="text-[14.5px] min-w-0">
-              <span className="inline-flex items-center gap-2.5 flex-wrap">
-                <DecisionTag type={d.type} />
-                <span className="text-ink">{d.summary || d.type}</span>
-              </span>
-            </div>
-            <a
-              href={`${EXPLORER}/tx/${d.txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mono text-[12px] text-shade-50 underline underline-offset-2 hover:text-ink whitespace-nowrap"
-            >
-              {d.txHash.slice(0, 10)}… ↗
-            </a>
-          </div>
-        ))}
-      </div>
+      <DecisionRows decisions={data.items} />
       {data.total > DECISIONS_PAGE_SIZE && (
         <div className="mt-5 flex items-center justify-center gap-3">
           <button
@@ -1177,6 +1177,37 @@ function PaginatedDecisionList({ agentId }: { agentId: number }) {
         </div>
       )}
     </>
+  );
+}
+
+function DecisionRows({ decisions }: { decisions: Decision[] }) {
+  return (
+    <div className="flex flex-col">
+      {decisions.map((d) => (
+        <div
+          key={d.id}
+          className="grid grid-cols-[100px_1fr_auto] gap-4 items-start py-4 border-b border-hairline-soft last:border-b-0"
+        >
+          <span className="mono text-[12px] text-shade-50">
+            {formatRelative(d.timestamp)}
+          </span>
+          <div className="text-[14.5px] min-w-0">
+            <span className="inline-flex items-center gap-2.5 flex-wrap">
+              <DecisionTag type={d.type} />
+              <span className="text-ink">{d.summary || d.type}</span>
+            </span>
+          </div>
+          <a
+            href={`${EXPLORER}/tx/${d.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mono text-[12px] text-shade-50 underline underline-offset-2 hover:text-ink whitespace-nowrap"
+          >
+            {d.txHash.slice(0, 10)}… ↗
+          </a>
+        </div>
+      ))}
+    </div>
   );
 }
 
