@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount } from "wagmi";
+import {
+  useAccount,
+  useChainId,
+  usePublicClient,
+  useWriteContract,
+} from "wagmi";
+import { parseAbi } from "viem";
+import { mantleSepolia } from "@/lib/wagmi";
+import { decodeContractError } from "@/lib/decodeError";
+import { useToast } from "@/lib/toast";
 import { api, ApiError } from "@/lib/api";
 import {
   AssetTag,
@@ -18,6 +27,7 @@ import { WindDownBanner } from "@/components/agent/WindDownBanner";
 import { IncubationCard } from "@/components/agent/IncubationCard";
 import { MintModal } from "@/components/agent/MintModal";
 import { RedeemModal } from "@/components/agent/RedeemModal";
+import { NavChart } from "@/components/agent/NavChart";
 import { cn } from "@/lib/cn";
 import {
   formatAddress,
@@ -39,10 +49,17 @@ type NarratorNote = components["schemas"]["NarratorNote"];
 type WindDownState = components["schemas"]["WindDownState"];
 type BenchmarkResponse = components["schemas"]["BenchmarkResponse"];
 type NavHistoryResponse = components["schemas"]["NavHistoryResponse"];
+type ConditionCheckResponse = components["schemas"]["ConditionCheckResponse"];
 
 const EXPLORER = "https://sepolia.mantlescan.xyz";
 const SENIOR_WINDOW_DAYS = 90;
 const DECISIONS_PAGE_SIZE = 10;
+
+/** Permissionless wind-down progression / settlement cranks. */
+const VAULT_WINDDOWN_ABI = parseAbi([
+  "function progressWindDown() returns (uint256 remainingPositions)",
+  "function settle()",
+]);
 
 export default function AgentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -54,7 +71,7 @@ export default function AgentDetailPage() {
   const initialAction =
     action === "mint" || action === "redeem" ? action : null;
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["agent", id],
     queryFn: () =>
       api.get("/agents/{agent_id}", {
@@ -64,8 +81,8 @@ export default function AgentDetailPage() {
     staleTime: 10_000,
   });
 
-  // 24h NAV/share delta — fetched in parallel. Replaces the previous
-  // simulated `totalReturn / 30` approximation.
+  // 24h NAV-per-share delta — fetched in parallel for the ActionCard
+  // header. null when the agent has fewer than 2 data points yet.
   const { data: navHistory24h } = useQuery({
     queryKey: ["nav-history", id, "24h"],
     queryFn: () =>
@@ -139,7 +156,11 @@ export default function AgentDetailPage() {
       {data.windDown && (
         <>
           <WindDownBanner state={data.windDown} />
-          <WindDownProgress state={data.windDown} />
+          <WindDownProgress
+            state={data.windDown}
+            vaultAddress={data.vaultAddress as `0x${string}`}
+            onChange={() => refetch()}
+          />
         </>
       )}
 
@@ -234,6 +255,11 @@ export default function AgentDetailPage() {
             <IncubationCard incubationStart={data.incubationStart} />
           )}
 
+          {/* NAV time series */}
+          <Section title="NAV history">
+            <NavChart agentId={data.agentId} />
+          </Section>
+
           {/* Narrator */}
           {data.latestNarratorNote && (
             <Section title="Narrator note">
@@ -281,6 +307,7 @@ export default function AgentDetailPage() {
             initialAction={initialAction}
           />
           <StructuralDefenseCard data={data} />
+          <EmergencyConditionsCard agentId={data.agentId} />
           <ManagerIdentityCard data={data} />
         </aside>
       </div>
@@ -680,7 +707,15 @@ function PythFreshness({
 
 /* ─────────── Wind-down progress ─────────── */
 
-function WindDownProgress({ state }: { state: WindDownState }) {
+function WindDownProgress({
+  state,
+  vaultAddress,
+  onChange,
+}: {
+  state: WindDownState;
+  vaultAddress: `0x${string}`;
+  onChange: () => void;
+}) {
   const now = Math.floor(Date.now() / 1000);
   const elapsedSec = Math.max(0, now - state.triggeredAt);
   const seniorWindowSec = SENIOR_WINDOW_DAYS * 86_400;
@@ -688,6 +723,15 @@ function WindDownProgress({ state }: { state: WindDownState }) {
   const remainingSec = Math.max(0, state.estimatedSettleAt - now);
   const remDays = Math.floor(remainingSec / 86_400);
   const remHours = Math.floor((remainingSec % 86_400) / 3600);
+
+  // Crank availability:
+  //   • progressWindDown: liquidates the next non-empty position. Callable
+  //     anytime during wind-down while positions remain.
+  //   • settle: final pro-rata distribution. Only callable when all positions
+  //     are liquidated AND the senior window (90d) has elapsed.
+  const canProgress = state.positionsRemaining > 0;
+  const canSettle =
+    state.positionsRemaining === 0 && now >= state.estimatedSettleAt;
 
   return (
     <div className="mb-6 rounded-[12px] border border-hairline-light bg-canvas-light p-5">
@@ -738,6 +782,206 @@ function WindDownProgress({ state }: { state: WindDownState }) {
           </div>
         </div>
       </div>
+
+      {/* Permissionless cranks — anyone can call these to nudge the
+          wind-down state machine forward. Critical for demos and for
+          stuck wind-downs. */}
+      <div className="mt-5 pt-4 border-t border-hairline-soft flex flex-wrap items-center gap-2">
+        <span className="mono text-[11.5px] text-shade-50">Crank ·</span>
+        <WindDownCrankButton
+          vaultAddress={vaultAddress}
+          functionName="progressWindDown"
+          label="Progress wind-down"
+          variant="outline-light"
+          disabled={!canProgress}
+          hint={
+            canProgress
+              ? "Liquidates the next non-empty position to USDC."
+              : state.positionsRemaining === 0
+                ? "All positions already liquidated."
+                : "Wind-down inactive."
+          }
+          onChange={onChange}
+        />
+        <WindDownCrankButton
+          vaultAddress={vaultAddress}
+          functionName="settle"
+          label="Settle"
+          variant="primary"
+          disabled={!canSettle}
+          hint={
+            canSettle
+              ? "Final pro-rata distribution. Senior holders pay first, founder absorbs residual."
+              : state.positionsRemaining > 0
+                ? `Liquidate ${state.positionsRemaining} more position(s) first.`
+                : "Senior window still open."
+          }
+          onChange={onChange}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WindDownCrankButton({
+  vaultAddress,
+  functionName,
+  label,
+  variant,
+  disabled,
+  hint,
+  onChange,
+}: {
+  vaultAddress: `0x${string}`;
+  functionName: "progressWindDown" | "settle";
+  label: string;
+  variant: "outline-light" | "primary";
+  disabled: boolean;
+  hint: string;
+  onChange: () => void;
+}) {
+  const chainId = useChainId();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
+  const { push: toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const onCorrectChain = chainId === mantleSepolia.id;
+
+  async function run() {
+    if (!publicClient || !onCorrectChain) return;
+    setBusy(true);
+    try {
+      const hash = await writeContractAsync({
+        address: vaultAddress,
+        abi: VAULT_WINDDOWN_ABI,
+        functionName,
+        args: [],
+      });
+      await publicClient.waitForTransactionReceipt({
+        hash,
+        timeout: 90_000,
+        pollingInterval: 2_000,
+      });
+      toast({
+        msg:
+          functionName === "settle"
+            ? "Vault settled · final distribution complete"
+            : "Wind-down progressed · next position liquidated",
+        tx: hash,
+      });
+      onChange();
+    } catch (e) {
+      const { message } = decodeContractError(e);
+      toast({ msg: `${label} failed — ${message}`, variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      variant={variant}
+      size="sm"
+      disabled={disabled || busy || !onCorrectChain}
+      onClick={run}
+      title={hint}
+    >
+      {busy ? "…" : label}
+    </Button>
+  );
+}
+
+/* ─────────── Emergency exit conditions ─────────── */
+
+function EmergencyConditionsCard({ agentId }: { agentId: number }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["conditions", agentId],
+    queryFn: () =>
+      api.get("/agents/{agent_id}/conditions", {
+        path: { agent_id: agentId },
+      }) as Promise<ConditionCheckResponse>,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="h-32 animate-pulse rounded-[12px] bg-hairline-light" />
+    );
+  }
+  if (isError || !data || !data.conditions || data.conditions.length === 0) {
+    return null; // hide card entirely when mandate has no exit conditions
+  }
+
+  const triggered = data.anyTriggered;
+  const cardClass = triggered
+    ? "border border-amber-helm/40 bg-amber-bg"
+    : "border border-hairline-light bg-canvas-light";
+  const eyebrowColor = triggered
+    ? "var(--phase-incubation-text)"
+    : undefined;
+
+  return (
+    <div className={cn("rounded-[12px] p-6", cardClass)}>
+      <div className="flex items-baseline justify-between mb-1">
+        <h3
+          className="text-[15px] font-medium text-ink"
+          style={triggered ? { color: eyebrowColor } : undefined}
+        >
+          Emergency exit conditions
+        </h3>
+        {triggered && (
+          <Tag variant="outline">⚠ triggered</Tag>
+        )}
+      </div>
+      <p className="text-[12.5px] text-shade-50 mb-4">
+        Live evaluation of the mandate&apos;s exit triggers · refreshes every
+        60s.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        {data.conditions.map((c, i) => (
+          <ConditionRow key={i} c={c} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConditionRow({
+  c,
+}: {
+  c: components["schemas"]["ConditionResult"];
+}) {
+  const tone = c.triggered
+    ? "text-amber-helm"
+    : c.parsed
+      ? "text-emerald-helm"
+      : "text-shade-50";
+  return (
+    <div className="border-t border-hairline-soft pt-3 first:border-t-0 first:pt-0">
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <span className="text-[13px] text-ink flex-1 min-w-0 break-words">
+          {c.condition}
+        </span>
+        <span className={cn("mono text-[11.5px] font-medium", tone)}>
+          {c.triggered
+            ? "TRIGGERED"
+            : c.parsed
+              ? "OK"
+              : "unparseable"}
+        </span>
+      </div>
+      {c.parsed && c.currentValue !== null && c.currentValue !== undefined && (
+        <div className="mono text-[11.5px] text-shade-50">
+          current {c.currentValue.toLocaleString()} · threshold{" "}
+          {c.threshold?.toLocaleString() ?? "—"}
+        </div>
+      )}
+      {c.note && (
+        <div className="text-[11.5px] text-shade-50 mt-1">{c.note}</div>
+      )}
     </div>
   );
 }

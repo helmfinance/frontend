@@ -32,22 +32,54 @@ interface StepRowProps {
   number?: number;
   label: ReactNode;
   sub?: ReactNode;
+  /** Estimated duration hint shown on the right (e.g. "~10s"). */
+  eta?: string;
   txHash?: string;
+  /** Optional action node (e.g. Retry button) — shown on the right when set. */
+  action?: ReactNode;
 }
 
-export function StepRow({ status, number, label, sub, txHash }: StepRowProps) {
+export function StepRow({
+  status,
+  number,
+  label,
+  sub,
+  eta,
+  txHash,
+  action,
+}: StepRowProps) {
+  // Highlight the row when the step is currently running so the user knows
+  // exactly which MetaMask popup belongs to which step.
+  const active = status === "spinning" || status === "active";
   return (
-    <div className="grid grid-cols-[36px_1fr_auto] gap-3.5 items-center py-3.5 border-b border-hairline-soft last:border-b-0">
+    <div
+      className={cn(
+        "grid grid-cols-[36px_1fr_auto] gap-3.5 items-center py-3.5 px-3 -mx-3 rounded-[8px] border-b border-hairline-soft last:border-b-0 transition-colors",
+        active && "bg-canvas-cream",
+      )}
+    >
       <StepIndicator status={status} number={number} />
       <div className="min-w-0">
-        <div className="text-[14px] font-medium text-ink">{label}</div>
+        <div className="text-[14px] font-medium text-ink flex items-center gap-2 flex-wrap">
+          <span>{label}</span>
+          {eta && status !== "done" && status !== "skipped" && (
+            <span className="mono text-[10.5px] font-medium text-shade-50 bg-canvas-soft rounded-full px-2 py-[1px]">
+              {eta}
+            </span>
+          )}
+          {status === "spinning" && (
+            <span className="mono text-[10.5px] font-medium text-shade-60 bg-aloe-10 rounded-full px-2 py-[1px]">
+              waiting for wallet…
+            </span>
+          )}
+        </div>
         {sub && (
           <div className="mono text-[12.5px] text-shade-50 mt-0.5 truncate">
             {sub}
           </div>
         )}
       </div>
-      <div className="min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
         {txHash && (
           <a
             href={`${EXPLORER}/tx/${txHash}`}
@@ -58,6 +90,7 @@ export function StepRow({ status, number, label, sub, txHash }: StepRowProps) {
             {txHash.slice(0, 10)}… ↗
           </a>
         )}
+        {action}
       </div>
     </div>
   );

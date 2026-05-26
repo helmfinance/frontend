@@ -37,6 +37,14 @@ const PYTH_ABI = parseAbi([
   "function updatePriceFeeds(bytes[] updateData) payable",
 ]);
 
+/**
+ * Margin under which we treat a Pyth feed as "still fresh enough to deposit
+ * without a fresh push". Pyth's adapter staleness threshold on Mantle Sepolia
+ * is ~60s; we use a tighter 20s buffer so the deposit tx still has runway by
+ * the time it confirms.
+ */
+const PYTH_FRESH_BUFFER_SEC = 20;
+
 type Stage = "input" | "running" | "done";
 
 type StepInfo = {
@@ -167,37 +175,42 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
   }, [amountUsdc, minDeposit, usdcBal, mntBal, pythFeeMnt]);
 
   /* ─── Execute ─── */
-  async function executeMint() {
-    if (!amountUsdc || !address || !publicClient) return;
-    setStage("running");
-
-    // Step 1: approve
+  /**
+   * Run individual mint steps idempotently. Each runStepX checks if the step
+   * is already done/skipped and bails out early — so on retry we only redo
+   * what's needed. Callers chain them via executeMint.
+   */
+  async function runApprove(): Promise<boolean> {
+    if (steps.approve.status === "done" || steps.approve.status === "skipped") {
+      return true;
+    }
     try {
-      if ((allowance ?? 0n) >= amountUsdc) {
+      if ((allowance ?? 0n) >= amountUsdc!) {
         setSteps((s) => ({ ...s, approve: { status: "skipped" } }));
-      } else {
-        setSteps((s) => ({ ...s, approve: { status: "spinning" } }));
-        const hash = await writeContractAsync({
-          address: CONTRACTS.usdc as `0x${string}`,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [vaultAddress, amountUsdc],
-        });
-        setSteps((s) => ({
-          ...s,
-          approve: { status: "spinning", txHash: hash },
-        }));
-        await publicClient.waitForTransactionReceipt({
-          hash,
-          timeout: 90_000,
-          pollingInterval: 2_000,
-        });
-        setSteps((s) => ({
-          ...s,
-          approve: { status: "done", txHash: hash },
-        }));
-        refetchAllowance();
+        return true;
       }
+      setSteps((s) => ({ ...s, approve: { status: "spinning" } }));
+      const hash = await writeContractAsync({
+        address: CONTRACTS.usdc as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [vaultAddress, amountUsdc!],
+      });
+      setSteps((s) => ({
+        ...s,
+        approve: { status: "spinning", txHash: hash },
+      }));
+      await publicClient!.waitForTransactionReceipt({
+        hash,
+        timeout: 90_000,
+        pollingInterval: 2_000,
+      });
+      setSteps((s) => ({
+        ...s,
+        approve: { status: "done", txHash: hash },
+      }));
+      refetchAllowance();
+      return true;
     } catch (e) {
       const { message } = decodeContractError(e);
       setSteps((s) => ({
@@ -205,16 +218,64 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         approve: { ...s.approve, status: "error", errorMsg: message },
       }));
       toast({ msg: `Mint failed at approval — ${message}`, variant: "error" });
-      return;
+      return false;
     }
+  }
 
-    // Step 2: Pyth
+  /**
+   * Decide whether the Pyth update tx is needed at all.
+   *
+   * Returns true when ALL position prices that drive valuation are still
+   * fresh per BE's evaluation (`priceStale === false`) AND their on-chain
+   * publish timestamps are within `PYTH_FRESH_BUFFER_SEC` of now.
+   *
+   * When true we skip step 2 → no MetaMask popup, no MNT spent.
+   *
+   * Conservative by design: any uncertainty (missing fields, only stale
+   * positions, agent has zero Pyth-priced assets) falls through and we just
+   * run the update.
+   */
+  function pythAlreadyFresh(): boolean {
+    const positions = agent.positions ?? [];
+    // Only synthetic equity positions need Pyth updates; mETH and USDY
+    // are priced via adapters with their own freshness sources.
+    const pythPositions = positions.filter(
+      (p) => p.priceUpdatedAt != null && p.assetClass === "equity",
+    );
+    if (pythPositions.length === 0) return false;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return pythPositions.every((p) => {
+      if (p.priceStale) return false;
+      const updatedAt = p.priceUpdatedAt ?? 0;
+      return updatedAt > 0 && nowSec - updatedAt <= PYTH_FRESH_BUFFER_SEC;
+    });
+  }
+
+  async function runPyth(): Promise<boolean> {
+    if (steps.pyth.status === "done" || steps.pyth.status === "skipped") {
+      return true;
+    }
+    // Pre-flight: if all Pyth-priced positions are already fresh, skip the
+    // on-chain update tx. Saves ~0.001 MNT/feed + one wallet popup.
+    if (pythAlreadyFresh()) {
+      setSteps((s) => ({ ...s, pyth: { status: "skipped" } }));
+      return true;
+    }
     try {
       setSteps((s) => ({ ...s, pyth: { status: "spinning" } }));
       const pyth: PythBundle = await api.get(
         "/agents/{agent_id}/pyth-update-bytes",
         { path: { agent_id: agent.agentId } },
       );
+      // Defensive second check: if BE returned an empty bundle, also skip.
+      if (
+        !pyth.updateData ||
+        pyth.updateData.length === 0 ||
+        pyth.feeMntWei === "0"
+      ) {
+        setSteps((s) => ({ ...s, pyth: { status: "skipped" } }));
+        return true;
+      }
       const hash = await writeContractAsync({
         address: CONTRACTS.pythAdapter as `0x${string}`,
         abi: PYTH_ABI,
@@ -226,7 +287,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         ...s,
         pyth: { status: "spinning", txHash: hash },
       }));
-      await publicClient.waitForTransactionReceipt({
+      await publicClient!.waitForTransactionReceipt({
         hash,
         timeout: 90_000,
         pollingInterval: 2_000,
@@ -235,6 +296,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         ...s,
         pyth: { status: "done", txHash: hash },
       }));
+      return true;
     } catch (e) {
       const { message } = decodeContractError(e);
       setSteps((s) => ({
@@ -242,11 +304,49 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         pyth: { ...s.pyth, status: "error", errorMsg: message },
       }));
       toast({ msg: `Mint failed at Pyth — ${message}`, variant: "error" });
-      return;
+      return false;
     }
+  }
+
+  /**
+   * Reset the step that errored back to idle and re-run executeMint. Steps
+   * with status "done" or "skipped" stay as-is and are short-circuited in
+   * each runStep helper.
+   */
+  function retryFromError() {
+    setSteps((s) => {
+      const reset = <T extends StepInfo>(x: T): T =>
+        x.status === "error" ? ({ status: "idle" } as T) : x;
+      return {
+        approve: reset(s.approve),
+        pyth: reset(s.pyth),
+        deposit: reset(s.deposit),
+      };
+    });
+    // executeMint reads from state on next tick — wrap with setTimeout(0)
+    // so React commits the reset before we re-enter the flow.
+    setTimeout(() => {
+      executeMint();
+    }, 0);
+  }
+
+  async function executeMint() {
+    if (!amountUsdc || !address || !publicClient) return;
+    setStage("running");
+
+    // Step 1: approve (idempotent)
+    if (!(await runApprove())) return;
+
+    // Step 2: Pyth (idempotent)
+    if (!(await runPyth())) return;
 
     // Step 3: deposit
     try {
+      // If a prior deposit attempt already succeeded, don't re-mint.
+      if (steps.deposit.status === "done") {
+        setStage("done");
+        return;
+      }
       setSteps((s) => ({ ...s, deposit: { status: "spinning" } }));
       const hash = await writeContractAsync({
         address: vaultAddress,
@@ -408,6 +508,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
           stage={stage}
           ticker={agent.ticker}
           resultShares={resultShares}
+          onRetry={retryFromError}
         />
       )}
     </Modal>
@@ -567,42 +668,83 @@ function TxBody({
   stage,
   ticker,
   resultShares,
+  onRetry,
 }: {
   steps: typeof INITIAL_STEPS;
   stage: Stage;
   ticker: string;
   resultShares: bigint | null;
+  onRetry: () => void;
 }) {
+  // Derive which step is currently running (= "active" in the banner).
+  const activeStepNumber =
+    steps.approve.status === "spinning"
+      ? 1
+      : steps.pyth.status === "spinning"
+        ? 2
+        : steps.deposit.status === "spinning"
+          ? 3
+          : null;
   return (
     <>
+      {stage === "running" && (
+        <div className="mb-4 rounded-[8px] border border-hairline-light bg-canvas-cream px-4 py-3 text-[12.5px] text-shade-60 leading-[1.5]">
+          <strong className="text-ink">
+            Step {activeStepNumber ?? "—"} of 3 — please confirm in your wallet.
+          </strong>{" "}
+          Don&apos;t close this dialog. If you cancel a step, you can retry it
+          without redoing the previous ones.
+        </div>
+      )}
       <Stepper>
         <StepRow
           status={steps.approve.status}
           number={1}
           label="Approve USDC"
+          eta="~10s"
           sub={
             steps.approve.errorMsg ?? "Authorize the vault to pull your USDC"
           }
           txHash={steps.approve.txHash}
+          action={
+            steps.approve.status === "error" ? (
+              <RetryBtn onClick={onRetry} label="Retry" />
+            ) : undefined
+          }
         />
         <StepRow
           status={steps.pyth.status}
           number={2}
           label="Update Pyth price"
+          eta="~10s · 0.001+ MNT"
           sub={
-            steps.pyth.errorMsg ?? "Fresh oracle quote · pay MNT fee"
+            steps.pyth.errorMsg ??
+            (steps.pyth.status === "skipped"
+              ? "Prices already fresh — no on-chain update needed"
+              : "Fresh oracle quote · pay MNT fee")
           }
           txHash={steps.pyth.txHash}
+          action={
+            steps.pyth.status === "error" ? (
+              <RetryBtn onClick={onRetry} label="Retry" />
+            ) : undefined
+          }
         />
         <StepRow
           status={steps.deposit.status}
           number={3}
           label="Deposit to vault"
+          eta="~10s"
           sub={
             steps.deposit.errorMsg ??
             `Mint ${ticker} shares from your USDC`
           }
           txHash={steps.deposit.txHash}
+          action={
+            steps.deposit.status === "error" ? (
+              <RetryBtn onClick={onRetry} label="Retry" />
+            ) : undefined
+          }
         />
       </Stepper>
 
@@ -630,6 +772,18 @@ function TxBody({
 }
 
 /* ─────────── Layout atoms ─────────── */
+
+function RetryBtn({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mono text-[11.5px] font-medium rounded-full bg-ink text-on-primary px-2.5 py-1 hover:bg-shade-70 transition-colors"
+    >
+      ↻ {label}
+    </button>
+  );
+}
 
 function AmountInputWrap({
   children,

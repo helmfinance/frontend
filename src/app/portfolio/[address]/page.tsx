@@ -529,10 +529,15 @@ function HoldingRow({ h }: { h: PortfolioPosition }) {
           ) : null
         }
       />
-      <div className="flex gap-2 sm:justify-end">
+      <div className="flex flex-wrap gap-2 sm:justify-end">
         <Link href={`/agents/${h.agentId}`}>
           <Button variant="outline-light" size="sm">
             View
+          </Button>
+        </Link>
+        <Link href={`/agents/${h.agentId}?action=mint`}>
+          <Button variant="aloe" size="sm">
+            Mint more
           </Button>
         </Link>
         <Link href={`/agents/${h.agentId}?action=redeem`}>
