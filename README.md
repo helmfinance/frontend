@@ -1,108 +1,166 @@
 # Helm — Frontend
 
-Next.js 16 frontend for **Helm**, an AI Agent ETF marketplace on Mantle (REIT model). Pairs with [`helmfinance/contracts`](https://github.com/helmfinance/contracts) and [`helmfinance/backend`](https://github.com/helmfinance/backend).
+The web app for **Helm**, an AI Agent ETF marketplace on Mantle Sepolia.
+Each agent is its own ERC-4626 vault: deposit USDC, get share tokens, earn
+yield as on-chain dividends. Capital gains stay in NAV. Founder stake is
+subordinated, so external holders always settle first if the agent winds
+down.
 
-## Project model (recap)
+This repo is the UI layer. It pairs with two siblings:
 
-- Each agent = ERC-20 share token + ERC-8004 NFT identity + ERC-4626-style vault holding USDC, mETH, USDY, and Pyth-priced synthetic equities.
-- Yield → 90% holders dividend (USDC) / 10% founder carry. Capital gains stay in NAV.
-- Founder shares are subordinated — external holders settle first on wind-down.
-- Redemptions go through a lockup queue (instant/30d/60d/90d).
+- [`helmfinance/contracts`](https://github.com/helmfinance/contracts) — Solidity
+- [`helmfinance/backend`](https://github.com/helmfinance/backend) — FastAPI indexer + LLM mandate parser
 
 ## Stack
 
-- **Next.js 16.2** (App Router · Turbopack) · React 19.2 · TypeScript
-- **wagmi v2 + viem 2.51 + RainbowKit 2.2** for wallet/chain (Mantle Sepolia, chainId 5003)
-- **Tailwind v4** (`@theme inline` design tokens, `data-theme="dark"` for dark mode)
-- **@tanstack/react-query** for BE data fetching
-- **openapi-typescript** for auto-generated BE types
+- Next.js 16.2 (App Router, Turbopack) on React 19.2 + TypeScript
+- wagmi v2, viem 2.51, RainbowKit 2.2 — wallet + chain (Mantle Sepolia, chainId 5003)
+- Tailwind v4 with `@theme inline` design tokens, `data-theme="dark"` for dark mode
+- `@tanstack/react-query` for backend fetching and cache
+- `openapi-typescript` regenerates BE types straight from `/openapi.json`
 
 ## Getting started
 
 ```bash
-# 1. install deps (pnpm preferred — there's a pnpm-lock.yaml)
 pnpm install
 
-# 2. env vars
 cp .env.example .env.local
-# fill in HELM_BE_URL + NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+# Fill in HELM_BE_URL and NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.
 
-# 3. (optional) regenerate BE types from current OpenAPI
-pnpm gen:api
-
-# 4. dev
-pnpm dev          # http://localhost:3000
-
-# 5. prod build (TypeScript + Turbopack verify)
-pnpm build
+pnpm gen:api    # optional — regenerate src/lib/api-types.gen.ts from BE OpenAPI
+pnpm dev        # http://localhost:3000
+pnpm build      # production build with TypeScript check
 ```
+
+The four env vars:
+
+| Name | Visibility | What it does |
+|---|---|---|
+| `HELM_BE_URL` | server only | Backend origin used by the Next.js rewrite proxy. Never bundled to the client. |
+| `NEXT_PUBLIC_API_URL` | client + server | Base path for API calls. Set to `/be` so the browser stays same-origin. |
+| `NEXT_PUBLIC_CHAIN_ID` | client + server | Must equal `5003`. The wagmi config asserts this matches `addresses.json` at startup. |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | client | WalletConnect Cloud dApp ID. Needed for mobile wallets to identify Helm via QR. |
 
 ## Routes
 
-| Path | Purpose |
+| Path | Notes |
 |---|---|
-| `/` | Marketplace · agent grid + filters (phase, asset class, lockup, sort) |
-| `/agents/[id]` | Detail · KPI / narrator / mandate / positions / decisions / benchmark · MintModal + RedeemModal |
-| `/agents/[id]/mint` | Redirect → `/agents/[id]?action=mint` |
-| `/agents/[id]/redeem` | Redirect → `/agents/[id]?action=redeem` |
-| `/portfolio` | Redirect to `/portfolio/{connectedAddress}` (or connect prompt) |
-| `/portfolio/[address]` | 4-tab portfolio · Holdings / Dividends / Redemptions / Founder |
-| `/register` | 3-stage founder wizard · mandate → parsed (editable) → seed |
-| `/admin` | Testnet console · time advance / mint USDC / manual triggers / qualify / slash / debug inspector |
-| `/debug` | BE / chain connectivity probe |
+| `/` | Marketplace — agent grid with phase / asset class / lockup filters and sort |
+| `/agents/[id]` | Detail page. Hosts MintModal + RedeemModal, NAV history chart, decision log, benchmark vs sSPY and 60/40, and the wind-down progress card with the permissionless `progressWindDown` / `settle` cranks |
+| `/agents/[id]/mint` | Permanent redirect to `/agents/[id]?action=mint` |
+| `/agents/[id]/redeem` | Permanent redirect to `/agents/[id]?action=redeem` |
+| `/portfolio` | Auto-redirects to the connected wallet's portfolio. Shows a connect prompt while disconnected. |
+| `/portfolio/[address]` | Four tabs: Holdings, Dividends, Redemptions, Founder. Holdings rows have View / Mint more / Redeem. |
+| `/register` | Three-step founder wizard: write mandate → parse + edit → stake seed and launch |
+| `/admin` | Testnet console. Time advance, MockUSDC mint, manual rebalance/harvest/distribute/NFT-metadata triggers, Phase-2 qualify, slash, and a debug inspector that pulls each `/admin/debug/*` endpoint into a collapsible JSON viewer. |
+| `/debug` | Quick connectivity probe for BE + chain RPC |
 
-## Architecture notes
+## How the pieces fit
 
-- **CORS** — BE doesn't whitelist localhost beyond 3000/8080, so we proxy via Next.js rewrites: `/be/:path*` → `${HELM_BE_URL}/:path*`. Browser only ever sees same-origin URLs. Works in dev and on Vercel.
-- **Mint flow** — 3 txs: `USDC.approve` → `PythPriceAdapter.updatePriceFeeds {value: feeMntWei}` → `AgentVault.deposit`. Pyth fee is real-MNT, paid via `msg.value`.
-- **Redeem flow** — 2 txs + lockup + 1 claim: `AgentToken.approve(queue)` → `queue.requestRedeem(agentId, shares, tier)` → wait → `queue.claim(requestId)`. Cancel window closes 1 day before unlock (UI guards this).
-- **Founder actions** — `FounderVault.{withdraw, depositFounderShares, claimCarry, triggerWindDown}`. The 40% withdrawal cap is enforced on-chain; UI surfaces cumulative draw vs cap.
-- **Seed agents** — `agentId >= 9000` are BE-only stubs; chain calls revert. Real test agent on Mantle Sepolia: 21.
-- **Phase enums** — BE returns `RegistryPhase` strings (5-valued: Incubation/PublicLaunch/WindDown/Slashed/Settled). `VaultPhase` on-chain is 4-valued (no Slashed). Don't confuse them.
-- **BigInt serialization quirk** — Pydantic `to_camel` + digit-prefix fields → `apy_30d_bps` becomes `apy30DBps` (D uppercase). Same for `apy7DBps`.
+### Same-origin BE proxy
 
-## Files of interest
+The backend's CORS only whitelists `:3000` and `:8080`. Instead of touching CORS,
+`next.config.ts` rewrites `/be/:path*` to `${HELM_BE_URL}/:path*`. The browser
+only ever sees same-origin URLs (in dev or on Vercel), and the actual backend
+host never gets bundled into the client.
+
+### Mint (three signatures)
+
+1. `USDC.approve(vault, amount)` — skipped if allowance is already enough
+2. `PythPriceAdapter.updatePriceFeeds(updateData)` with `msg.value = pythFeeMntWei` — also skipped when every Pyth-priced position is already fresh (`priceStale === false` and updated within 20s)
+3. `AgentVault.deposit(amount, receiver)` — pulls USDC via `transferFrom`, mints AGT to the receiver
+
+Each step is idempotent. If the third tx fails, the retry button only re-runs
+the third one — approve and Pyth aren't redone, so you don't pay the Pyth fee
+twice.
+
+### Redeem (two signatures + lockup + one claim)
+
+1. `AgentToken.approve(redemptionQueue, shares)`
+2. `RedemptionQueue.requestRedeem(agentId, shares, tier)` — tier is `instant`, `30d`, `60d`, or `90d`
+3. After the lockup elapses, `RedemptionQueue.claim(requestId)`
+
+The cancel button stays disabled inside the last 24 hours before unlock, matching
+the on-chain `CancelWindowClosed` guard. No "submit and fail" round-trip.
+
+### Founder actions
+
+`FounderVault` exposes `withdraw`, `depositFounderShares`, `claimCarry`, and
+`triggerWindDown`. The Portfolio "Founder" tab routes each through a modal:
+withdraw and deposit share an amount-input modal that reads the AGT address from
+the FounderVault and handles the AGT.approve step automatically. The wind-down
+button requires typing `wind down` to confirm.
+
+### Phase enums
+
+The protocol has two of them:
+
+- **`VaultPhase`** (4 values: Incubation, PublicLaunch, WindDown, Settled) — what the AgentVault tracks for its own modifiers
+- **`RegistryPhase`** (5 values: same four plus Slashed) — what HelmRegistry reports, and what the BE serializes into `AgentSummary.phase`
+
+These can disagree on-chain. If a vault auto-advances to PublicLaunch but the
+registry transition tx never lands, the registry still reads Incubation while
+the vault accepts public deposits. The FE uses what BE reports (which mirrors
+the vault), so this is invisible to users — but the Detail page's mint guard
+relies on the vault's modifier, not the registry, which is the authoritative
+source for whether a deposit will succeed.
+
+### Seed agents
+
+Any agent with `agentId >= 9000` is a backend-only stub created by `seed.py`
+for demo purposes. They show up in the marketplace but their on-chain vault
+addresses are empty — calls revert. The FE detects this and disables Mint /
+Redeem with a small "Seed agent" pill. The real test agent on Sepolia is `21`.
+
+### BigInt serialization
+
+BE uses Pydantic's `to_camel`. Numeric prefixes break naively: `apy_30d_bps`
+becomes `apy30DBps` with a capital D. Same with `apy7DBps`. Stick to the
+generated types and the linter will catch typos.
+
+## File layout
 
 ```
 src/
 ├── app/
-│   ├── globals.css              design tokens (CSS vars, @theme inline, keyframes)
-│   ├── layout.tsx               Header + Providers + Inter/Geist Mono fonts
-│   ├── providers.tsx            Theme + Wagmi + Query + RainbowKit + Toast
-│   ├── page.tsx                 Marketplace
-│   ├── agents/[id]/page.tsx     Agent detail
-│   ├── portfolio/[address]/page.tsx   4-tab portfolio
-│   ├── register/page.tsx        Founder onboarding wizard
-│   └── admin/page.tsx           Testnet/judging console
+│   ├── globals.css                Design tokens, @theme inline, animations
+│   ├── layout.tsx                 Header + Providers + Inter / Geist Mono
+│   ├── providers.tsx              ThemeProvider → WagmiProvider → QueryClient → RainbowKit → Toast
+│   ├── page.tsx                   Marketplace
+│   ├── agents/[id]/page.tsx       Agent detail (KPIs, NAV chart, narrator, mandate, positions, decisions, benchmark, wind-down, conditions)
+│   ├── portfolio/[address]/page.tsx   Four-tab portfolio with founder actions
+│   ├── register/page.tsx          Founder onboarding wizard
+│   └── admin/page.tsx             Testnet console
 ├── components/
-│   ├── Header.tsx               Pill nav + mobile drawer + dark toggle + wallet pill
-│   ├── AgentCard.tsx            Marketplace card · real /nav-history sparkline
+│   ├── Header.tsx                 Pill nav + mobile drawer + theme toggle + wallet pill
+│   ├── AgentCard.tsx              Marketplace card with real /nav-history sparkline
 │   ├── agent/
-│   │   ├── MintModal.tsx        3-tx modal w/ Stepper
-│   │   ├── RedeemModal.tsx      Tier picker + 2-tx modal
+│   │   ├── MintModal.tsx          Three-step idempotent mint flow
+│   │   ├── RedeemModal.tsx        Tier picker + queue.requestRedeem
+│   │   ├── NavChart.tsx           Inline SVG NAV/share line chart, 24h/7d/30d/All toggle
 │   │   ├── WindDownBanner.tsx
 │   │   └── IncubationCard.tsx
-│   └── ui/                      Button · Tag · PhaseBadge · ReputationBar · Card · Sparkline ·
-│                                Modal · Stepper · EmptyState
+│   └── ui/                        Button, Tag, PhaseBadge, ReputationBar, Card, Sparkline,
+│                                  Modal, Stepper, EmptyState
 └── lib/
-    ├── theme.tsx                ThemeProvider (data-theme="light|dark")
-    ├── wagmi.ts                 mantleSepolia + RainbowKit config
-    ├── api.ts                   Typed fetch wrapper
-    ├── api-types.gen.ts         openapi-typescript output
-    ├── addresses.json           All contract addresses
-    ├── contracts-constants.ts   LockupTier, VaultPhase, FEE_RATES, Pyth feeds
-    ├── abis/*.json              15 contract ABIs
-    ├── decodeError.ts           viem revert → friendly messages
-    ├── format.ts                formatUsdc, formatBps, formatPercent, …
-    └── toast.tsx                Bottom-right pill toasts (with tx hash links)
+    ├── theme.tsx                  ThemeProvider — persists data-theme="light|dark"
+    ├── wagmi.ts                   mantleSepolia chain + RainbowKit config
+    ├── api.ts                     Typed fetch wrapper that substitutes path params
+    ├── api-types.gen.ts           openapi-typescript output (regenerate via pnpm gen:api)
+    ├── addresses.json             All Mantle Sepolia contract addresses
+    ├── contracts-constants.ts     LockupTier, VaultPhase, FEE_RATES, Pyth feed IDs
+    ├── abis/*.json                15 contract ABIs
+    ├── decodeError.ts             Maps viem revert data to friendly strings
+    ├── format.ts                  formatUsdc, formatBps, formatPercent, …
+    └── toast.tsx                  Bottom-right pill toasts with Mantlescan tx links
 ```
 
 ## Commands
 
 ```bash
-pnpm dev          # dev server (Turbopack)
-pnpm build        # prod build + TS check
-pnpm gen:api      # regenerate src/lib/api-types.gen.ts from BE OpenAPI
+pnpm dev          # Dev server (Turbopack)
+pnpm build        # Production build + TypeScript check
+pnpm gen:api      # Regenerate src/lib/api-types.gen.ts from BE OpenAPI
 pnpm lint
 ```
 
