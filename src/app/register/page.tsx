@@ -127,6 +127,13 @@ export default function RegisterPage() {
   const [validating, setValidating] = useState(false);
   const [validateErrors, setValidateErrors] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
+  /**
+   * BE's /mandate/validate is currently a schema-only stub that returns 501.
+   * The first time we hit that, we flip to read-only mode so the user can
+   * still continue with the originally parsed mandate instead of being
+   * stuck on a Re-validate button that never succeeds. Cleared on parse.
+   */
+  const [editsUnsupported, setEditsUnsupported] = useState(false);
 
   // Seed state
   const [seedInput, setSeedInput] = useState("1000");
@@ -181,6 +188,7 @@ export default function RegisterPage() {
       setEditedHash(r.mandateHash);
       setValidateErrors([]);
       setDirty(false);
+      setEditsUnsupported(false);
       setStage("parsed");
       if (r.warnings.length > 0) {
         toast({ msg: `Parsed with ${r.warnings.length} warning(s)` });
@@ -216,6 +224,21 @@ export default function RegisterPage() {
         });
       }
     } catch (e) {
+      // /mandate/validate is currently a schema-only stub (HTTP 501). Roll
+      // the edit panel back to the originally parsed values so the user
+      // isn't stuck in a "dirty" state with no way to clear it.
+      if (e instanceof ApiError && e.status === 501 && parsed) {
+        setEditedMandate(parsed.mandate);
+        setEditedHash(parsed.mandateHash);
+        setValidateErrors([]);
+        setDirty(false);
+        setEditsUnsupported(true);
+        toast({
+          msg: "Manual edits aren't supported by the backend yet — reverted to the parsed values.",
+          variant: "error",
+        });
+        return;
+      }
       const msg =
         e instanceof ApiError
           ? `${e.status}: ${JSON.stringify(e.detail)}`
@@ -555,7 +578,27 @@ export default function RegisterPage() {
               dirty={dirty}
               hash={editedHash}
               onChange={patchMandate}
+              readOnly={editsUnsupported}
             />
+            {editsUnsupported && (
+              <div
+                className="mt-3 rounded-[8px] border border-amber-helm/30 bg-amber-bg px-4 py-3 text-[13px] leading-[1.5]"
+                style={{ color: "var(--phase-incubation-text)" }}
+              >
+                <div className="font-medium mb-1">
+                  Manual edits paused
+                </div>
+                Backend <span className="mono">/mandate/validate</span> isn&apos;t implemented yet, so we can&apos;t re-hash an edited mandate. Continue with the parsed values, or use{" "}
+                <button
+                  type="button"
+                  onClick={() => setStage("mandate")}
+                  className="underline underline-offset-2 hover:no-underline"
+                >
+                  ← Edit mandate text
+                </button>{" "}
+                to re-parse from scratch.
+              </div>
+            )}
             {parsed.warnings.length > 0 && (
               <div
                 className="mt-3 rounded-[8px] border border-amber-helm/30 bg-amber-bg px-4 py-3 text-[13px]"
@@ -824,18 +867,28 @@ function MandateEditor({
   dirty,
   hash,
   onChange,
+  readOnly = false,
 }: {
   mandate: MandateSchema;
   mandateUri: string;
   dirty: boolean;
   hash: string | null;
   onChange: (p: Partial<MandateSchema>) => void;
+  /** When true, all inputs become disabled — BE doesn't accept edits yet. */
+  readOnly?: boolean;
 }) {
+  // Wrap onChange so child input handlers no-op silently in read-only mode.
+  const guardedChange = (p: Partial<MandateSchema>) => {
+    if (readOnly) return;
+    onChange(p);
+  };
+
   function toggleLockup(t: LockupTier) {
+    if (readOnly) return;
     const next = mandate.allowedLockups.includes(t)
       ? mandate.allowedLockups.filter((x) => x !== t)
       : [...mandate.allowedLockups, t];
-    onChange({ allowedLockups: next });
+    guardedChange({ allowedLockups: next });
   }
 
   // BE returns minimumDepositUsdc as a BigIntString (1e6). Convert for display.
@@ -851,7 +904,7 @@ function MandateEditor({
     const clean = raw.replace(/[^0-9.]/g, "");
     const n = Number(clean);
     if (!Number.isFinite(n) || n < 0) return;
-    onChange({
+    guardedChange({
       minimumDepositUsdc: BigInt(Math.floor(n * 1e6)).toString(),
     });
   }
@@ -860,21 +913,23 @@ function MandateEditor({
     <div className="rounded-[12px] bg-pistachio px-6 py-6">
       <Field label="Name">
         <PistachioInput
+          disabled={readOnly}
           value={mandate.name}
-          onChange={(v) => onChange({ name: v })}
+          onChange={(v) => guardedChange({ name: v })}
         />
       </Field>
       <Field label="Ticker">
         <PistachioInput
+          disabled={readOnly}
           value={mandate.ticker}
-          onChange={(v) => onChange({ ticker: v.toUpperCase().slice(0, 12) })}
+          onChange={(v) => guardedChange({ ticker: v.toUpperCase().slice(0, 12) })}
           className="mono"
         />
       </Field>
       <Field label="Strategy">
-        <PistachioTextarea
+        <PistachioTextarea disabled={readOnly}
           value={mandate.description}
-          onChange={(v) => onChange({ description: v })}
+          onChange={(v) => guardedChange({ description: v })}
         />
       </Field>
       <Field label="Eligible assets" hint={`${mandate.targetUniverse.length} symbols`}>
@@ -891,12 +946,13 @@ function MandateEditor({
         <select
           value={mandate.rebalanceFrequency}
           onChange={(e) =>
-            onChange({
+            guardedChange({
               rebalanceFrequency: e.target
                 .value as MandateSchema["rebalanceFrequency"],
             })
           }
-          className="rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 mono text-[13px] text-ink outline-none focus:border-ink"
+          disabled={readOnly}
+          className="rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 mono text-[13px] text-ink outline-none focus:border-ink disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {REBALANCE_FREQUENCIES.map((f) => (
             <option key={f} value={f}>
@@ -928,34 +984,34 @@ function MandateEditor({
         </div>
       </Field>
       <Field label="Carry (bps)">
-        <PistachioBpsInput
+        <PistachioBpsInput disabled={readOnly}
           value={mandate.carryBps}
-          onChange={(v) => onChange({ carryBps: v })}
+          onChange={(v) => guardedChange({ carryBps: v })}
         />
       </Field>
       <Field label="Founder share (bps)">
-        <PistachioBpsInput
+        <PistachioBpsInput disabled={readOnly}
           value={mandate.founderShareBps}
-          onChange={(v) => onChange({ founderShareBps: v })}
+          onChange={(v) => guardedChange({ founderShareBps: v })}
         />
       </Field>
       <Field label="Founder lockup (days)">
-        <PistachioIntInput
+        <PistachioIntInput disabled={readOnly}
           value={mandate.founderLockupDays}
-          onChange={(v) => onChange({ founderLockupDays: v })}
+          onChange={(v) => guardedChange({ founderLockupDays: v })}
           suffix="d"
         />
       </Field>
       <Field label="Subordination cap (bps)">
-        <PistachioBpsInput
+        <PistachioBpsInput disabled={readOnly}
           value={mandate.subordinationThresholdBps}
-          onChange={(v) => onChange({ subordinationThresholdBps: v })}
+          onChange={(v) => guardedChange({ subordinationThresholdBps: v })}
         />
       </Field>
       <Field label="Max single position (bps)">
-        <PistachioBpsInput
+        <PistachioBpsInput disabled={readOnly}
           value={mandate.maxSinglePositionBps}
-          onChange={(v) => onChange({ maxSinglePositionBps: v })}
+          onChange={(v) => guardedChange({ maxSinglePositionBps: v })}
         />
       </Field>
       <Field label="Min deposit (USDC)" isLast>
@@ -965,7 +1021,8 @@ function MandateEditor({
             inputMode="decimal"
             value={minDepositHuman}
             onChange={(e) => setMinDeposit(e.target.value)}
-            className="w-24 rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 mono text-[13px] text-right text-ink outline-none focus:border-ink"
+            disabled={readOnly}
+            className="w-24 rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 mono text-[13px] text-right text-ink outline-none focus:border-ink disabled:opacity-60 disabled:cursor-not-allowed"
           />
           <span
             className="mono text-[11.5px]"
@@ -1043,22 +1100,29 @@ function Field({
   );
 }
 
+const PISTACHIO_INPUT_BASE =
+  "rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 text-[13px] text-ink outline-none focus:border-ink disabled:opacity-60 disabled:cursor-not-allowed";
+
 function PistachioInput({
   value,
   onChange,
   className,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
       className={cn(
-        "w-48 sm:w-60 rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 text-[13px] text-right text-ink outline-none focus:border-ink",
+        "w-48 sm:w-60 text-right",
+        PISTACHIO_INPUT_BASE,
         className,
       )}
     />
@@ -1068,15 +1132,21 @@ function PistachioInput({
 function PistachioTextarea({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <textarea
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-72 min-h-[60px] rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 text-[13px] text-ink leading-[1.5] outline-none focus:border-ink resize-y"
+      disabled={disabled}
+      className={cn(
+        "w-72 min-h-[60px] leading-[1.5] resize-y",
+        PISTACHIO_INPUT_BASE,
+      )}
     />
   );
 }
@@ -1084,9 +1154,11 @@ function PistachioTextarea({
 function PistachioBpsInput({
   value,
   onChange,
+  disabled,
 }: {
   value: number;
   onChange: (v: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -1100,7 +1172,8 @@ function PistachioBpsInput({
           const v = Number(e.target.value);
           if (Number.isFinite(v) && v >= 0 && v <= 10000) onChange(v);
         }}
-        className="w-20 rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 mono text-[13px] text-right text-ink outline-none focus:border-ink"
+        disabled={disabled}
+        className={cn("w-20 mono text-right", PISTACHIO_INPUT_BASE)}
       />
       <span
         className="mono text-[11.5px]"
@@ -1116,10 +1189,12 @@ function PistachioIntInput({
   value,
   onChange,
   suffix,
+  disabled,
 }: {
   value: number;
   onChange: (v: number) => void;
   suffix?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -1132,7 +1207,8 @@ function PistachioIntInput({
           const v = Number(e.target.value);
           if (Number.isFinite(v) && v >= 0) onChange(v);
         }}
-        className="w-20 rounded-[6px] bg-canvas-cream/40 border border-pistachio-12 px-2 py-1 mono text-[13px] text-right text-ink outline-none focus:border-ink"
+        disabled={disabled}
+        className={cn("w-20 mono text-right", PISTACHIO_INPUT_BASE)}
       />
       {suffix && (
         <span
