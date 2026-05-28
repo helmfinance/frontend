@@ -35,6 +35,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { api, ApiError } from "@/lib/api";
 import { CONTRACTS, mantleSepolia } from "@/lib/wagmi";
 import { decodeContractError } from "@/lib/decodeError";
+import { waitForTx } from "@/lib/waitForTx";
 import {
   formatAddress,
   formatRelative,
@@ -686,11 +687,7 @@ function DividendClaimButton({
         functionName: "claim",
         args: [BigInt(d.agentId), epochs],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({
         msg: `Claimed ${formatUsdc(d.claimableAmountUsdc, {
           withSymbol: true,
@@ -746,11 +743,7 @@ function ClaimAllDividendsButton({
           args: [BigInt(d.agentId), epochs],
         });
         lastHash = hash;
-        await publicClient.waitForTransactionReceipt({
-          hash,
-          timeout: 90_000,
-          pollingInterval: 2_000,
-        });
+        await waitForTx(publicClient!, hash);
       }
       const total = dividends.reduce(
         (s, d) => s + BigInt(d.claimableAmountUsdc || "0"),
@@ -951,11 +944,7 @@ function RedemptionCancelButton({
         functionName: "cancel",
         args: [BigInt(requestId)],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({ msg: `Redemption #${requestId} cancelled`, tx: hash });
       onChange();
     } catch (e) {
@@ -1004,11 +993,7 @@ function RedemptionClaimButton({
         functionName: "claim",
         args: [BigInt(requestId)],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({ msg: `Redemption #${requestId} claimed`, tx: hash });
       onChange();
     } catch (e) {
@@ -1342,11 +1327,7 @@ function FounderShareModal({
             functionName: "approve",
             args: [fv.founderVaultAddress as `0x${string}`, amount],
           });
-          await publicClient.waitForTransactionReceipt({
-            hash: approveHash,
-            timeout: 90_000,
-            pollingInterval: 2_000,
-          });
+          await waitForTx(publicClient, approveHash);
           refetchAllowance();
         }
         // 2. deposit
@@ -1356,11 +1337,7 @@ function FounderShareModal({
           functionName: "depositFounderShares",
           args: [amount],
         });
-        await publicClient.waitForTransactionReceipt({
-          hash,
-          timeout: 90_000,
-          pollingInterval: 2_000,
-        });
+        await waitForTx(publicClient!, hash);
         toast({ msg: `Deposited ${input.trim()} shares to FounderVault`, tx: hash });
       } else {
         // withdraw
@@ -1370,11 +1347,7 @@ function FounderShareModal({
           functionName: "withdraw",
           args: [amount],
         });
-        await publicClient.waitForTransactionReceipt({
-          hash,
-          timeout: 90_000,
-          pollingInterval: 2_000,
-        });
+        await waitForTx(publicClient!, hash);
         toast({ msg: `Withdrew ${input.trim()} shares`, tx: hash });
       }
       onChange();
@@ -1572,11 +1545,7 @@ function FounderTriggerWindDownButton({
         functionName: "triggerWindDown",
         args: [reason.trim()],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({ msg: `${agentName} wind-down triggered`, tx: hash });
       onChange();
       setOpen(false);
@@ -1699,11 +1668,7 @@ function FounderClaimCarryButton({
         functionName: "claimCarry",
         args: [],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({ msg: "Carry claimed", tx: hash });
       onChange();
     } catch (e) {

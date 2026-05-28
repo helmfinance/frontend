@@ -19,6 +19,7 @@ import { mantleSepolia, CONTRACTS } from "@/lib/wagmi";
 import { AGT_DECIMALS, USDC_DECIMALS } from "@/lib/contracts-constants";
 import { useDebounce } from "@/lib/hooks";
 import { decodeContractError } from "@/lib/decodeError";
+import { waitForTx } from "@/lib/waitForTx";
 import { formatUsdc } from "@/lib/format";
 import { Button, Modal, Stepper, StepRow } from "@/components/ui";
 import type { StepStatus } from "@/components/ui";
@@ -199,11 +200,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         ...s,
         approve: { status: "spinning", txHash: hash },
       }));
-      await publicClient!.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       setSteps((s) => ({
         ...s,
         approve: { status: "done", txHash: hash },
@@ -286,11 +283,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         ...s,
         pyth: { status: "spinning", txHash: hash },
       }));
-      await publicClient!.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       setSteps((s) => ({
         ...s,
         pyth: { status: "done", txHash: hash },
@@ -357,11 +350,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         ...s,
         deposit: { status: "spinning", txHash: hash },
       }));
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       setSteps((s) => ({
         ...s,
         deposit: { status: "done", txHash: hash },

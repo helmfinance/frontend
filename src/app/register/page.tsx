@@ -37,6 +37,7 @@ import {
 } from "@/lib/contracts-constants";
 import addresses from "@/lib/addresses.json";
 import { decodeContractError } from "@/lib/decodeError";
+import { waitForTx } from "@/lib/waitForTx";
 import { formatBps, formatUsdc } from "@/lib/format";
 import { Button, Stepper, StepRow } from "@/components/ui";
 import type { StepStatus } from "@/components/ui";
@@ -338,11 +339,7 @@ export default function RegisterPage() {
           ...s,
           approve: { status: "spinning", txHash: hash },
         }));
-        await publicClient.waitForTransactionReceipt({
-          hash,
-          timeout: 90_000,
-          pollingInterval: 2_000,
-        });
+        await waitForTx(publicClient!, hash);
         setSteps((s) => ({
           ...s,
           approve: { status: "done", txHash: hash },
@@ -381,11 +378,7 @@ export default function RegisterPage() {
         ...s,
         register: { status: "spinning", txHash: hash },
       }));
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      const receipt = await waitForTx(publicClient, hash);
       setSteps((s) => ({
         ...s,
         register: { status: "done", txHash: hash },

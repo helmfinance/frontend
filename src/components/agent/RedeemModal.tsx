@@ -26,6 +26,7 @@ import {
   LockupTier,
 } from "@/lib/contracts-constants";
 import { decodeContractError } from "@/lib/decodeError";
+import { waitForTx } from "@/lib/waitForTx";
 import { formatDate, formatRelative, formatUsdc } from "@/lib/format";
 import { Button, Modal, Stepper, StepRow } from "@/components/ui";
 import type { StepStatus } from "@/components/ui";
@@ -185,11 +186,7 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
           ...s,
           approve: { status: "spinning", txHash: hash },
         }));
-        await publicClient.waitForTransactionReceipt({
-          hash,
-          timeout: 90_000,
-          pollingInterval: 2_000,
-        });
+        await waitForTx(publicClient!, hash);
         setSteps((s) => ({
           ...s,
           approve: { status: "done", txHash: hash },
@@ -219,11 +216,7 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
         ...s,
         request: { status: "spinning", txHash: hash },
       }));
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      const receipt = await waitForTx(publicClient, hash);
       setSteps((s) => ({
         ...s,
         request: { status: "done", txHash: hash },

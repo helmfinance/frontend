@@ -10,6 +10,7 @@
  */
 
 import { BaseError, ContractFunctionRevertedError } from "viem";
+import { TransactionRevertedError } from "@/lib/waitForTx";
 
 export type DecodedError = {
   /** Solidity custom-error name (or "Error" / "Unknown"). */
@@ -21,6 +22,16 @@ export type DecodedError = {
 };
 
 export function decodeContractError(err: unknown): DecodedError {
+  // Receipt-level revert (caught by waitForTx). We don't have the inner
+  // revert data here — surface a clear message and let the user click the
+  // tx link in the toast to inspect the reason on the explorer.
+  if (err instanceof TransactionRevertedError) {
+    return {
+      name: "TransactionReverted",
+      message: "체인에서 트랜잭션이 revert됐어요. 익스플로러에서 자세한 사유를 확인해주세요.",
+    };
+  }
+
   if (!(err instanceof BaseError)) {
     return {
       name: "Error",

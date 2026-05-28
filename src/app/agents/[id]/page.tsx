@@ -13,6 +13,7 @@ import {
 import { parseAbi } from "viem";
 import { mantleSepolia } from "@/lib/wagmi";
 import { decodeContractError } from "@/lib/decodeError";
+import { waitForTx } from "@/lib/waitForTx";
 import { useToast } from "@/lib/toast";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -857,11 +858,7 @@ function WindDownCrankButton({
         functionName,
         args: [],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({
         msg:
           functionName === "settle"
@@ -1220,9 +1217,17 @@ function ActionCard({
   dailyDelta: number | null;
   initialAction: "mint" | "redeem" | null;
 }) {
+  const { address: connectedAddress } = useAccount();
+  const isFounder =
+    !!connectedAddress &&
+    agent.founderAddress?.toLowerCase() === connectedAddress.toLowerCase();
   const isWindDown = agent.phase === "WindDown";
   const isIncubation = agent.phase === "Incubation";
-  const canMint = !isWindDown && agent.phase !== "Settled";
+  // Incubation only lets the founder deposit; everyone else hits
+  // OnlyFounderDuringIncubation() on-chain. Gate it client-side.
+  const blockedByIncubation = isIncubation && !isFounder;
+  const canMint =
+    !isWindDown && agent.phase !== "Settled" && !blockedByIncubation;
   const canRedeem = agent.phase !== "Settled";
   const noData = dailyDelta === null;
   const positive = !noData && dailyDelta >= 0;
@@ -1303,8 +1308,8 @@ function ActionCard({
               disabled
               className="w-full"
             >
-              {isIncubation
-                ? "Mint disabled · incubation"
+              {blockedByIncubation
+                ? "Founder-only · incubation"
                 : isWindDown
                   ? "Mint disabled · wind-down"
                   : "Mint disabled"}

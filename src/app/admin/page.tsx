@@ -28,6 +28,7 @@ import { api, ApiError } from "@/lib/api";
 import { CONTRACTS, mantleSepolia } from "@/lib/wagmi";
 import { USDC_DECIMALS } from "@/lib/contracts-constants";
 import { decodeContractError } from "@/lib/decodeError";
+import { waitForTx } from "@/lib/waitForTx";
 import { Button, Modal } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -528,11 +529,7 @@ function SlashAgentButton({
         functionName: "slash",
         args: [BigInt(agentId), reason.trim()],
       });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 90_000,
-        pollingInterval: 2_000,
-      });
+      await waitForTx(publicClient!, hash);
       toast({ msg: `Agent #${agentId} slashed`, tx: hash });
       setOpen(false);
       setReason("");
