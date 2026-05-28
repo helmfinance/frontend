@@ -72,6 +72,7 @@ export default function AdminPage() {
         <TimeAccelerationCard />
         <MintUsdcCard />
         <ManualTriggersCard />
+        <DemoBootstrapCard />
         <QualifyCard />
         <DebugInspector />
         <DangerZoneCard />
@@ -1016,6 +1017,277 @@ function DebugAccordion({
       )}
     </div>
   );
+}
+
+/* ─────────── Demo bootstrap — fast-forward an agent to qualified ─────────── */
+
+interface BootstrapLog {
+  cycle: number;
+  step: string;
+  ok: boolean;
+  detail?: string;
+}
+
+const BOOTSTRAP_DEFAULT_CYCLES = 12;
+const BOOTSTRAP_CYCLE_DAYS = 2;
+const BOOTSTRAP_TARGET_DAYS = 32; // a little past the 30d gate
+
+function DemoBootstrapCard() {
+  const { push: toast } = useToast();
+  const [agentId, setAgentId] = useState<number | null>(null);
+  const [cycles, setCycles] = useState(BOOTSTRAP_DEFAULT_CYCLES);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [log, setLog] = useState<BootstrapLog[]>([]);
+  const [done, setDone] = useState(false);
+
+  // Only Incubation-phase agents need bootstrapping.
+  const { data } = useQuery({
+    queryKey: ["admin-agents-list"],
+    queryFn: () =>
+      api.get("/agents", {
+        query: { limit: 100, phase: ["Incubation"] },
+      } as never) as Promise<AgentListResponse>,
+    staleTime: 30_000,
+  });
+  const incubatingAgents: AgentSummary[] = useMemo(
+    () => data?.items ?? [],
+    [data],
+  );
+  if (agentId === null && incubatingAgents.length > 0 && incubatingAgents[0]) {
+    const first = incubatingAgents[0];
+    setTimeout(() => setAgentId(first.agentId), 0);
+  }
+
+  const totalSteps = cycles * 2 + 2; // cycles × (advance + rebalance) + final advance + qualify check
+
+  async function run() {
+    if (!agentId || running) return;
+    setRunning(true);
+    setDone(false);
+    setProgress(0);
+    setLog([]);
+
+    const append = (entry: BootstrapLog) =>
+      setLog((prev) => [...prev, entry]);
+    const tick = () => setProgress((p) => p + 1);
+
+    try {
+      // N cycles of: advance(+2d) → rebalance(agentId)
+      for (let i = 1; i <= cycles; i++) {
+        // 1) advance
+        try {
+          await api.post("/admin/time/advance", {
+            seconds: BOOTSTRAP_CYCLE_DAYS * 86_400,
+          });
+          append({ cycle: i, step: `+${BOOTSTRAP_CYCLE_DAYS}d`, ok: true });
+        } catch (e) {
+          const msg = errMsg(e);
+          append({ cycle: i, step: "advance", ok: false, detail: msg });
+          throw new Error(`Cycle ${i} advance: ${msg}`);
+        }
+        tick();
+
+        // 2) rebalance — may revert if mandate weights are already met or
+        //    inputs unavailable. We continue regardless so the loop builds
+        //    history, but log the outcome.
+        try {
+          const r = (await api.post(
+            "/admin/agents/{agent_id}/rebalance",
+            undefined,
+            { path: { agent_id: agentId } },
+          )) as { txHash?: string };
+          append({
+            cycle: i,
+            step: "rebalance",
+            ok: true,
+            detail: r.txHash ? `tx ${r.txHash.slice(0, 10)}…` : undefined,
+          });
+        } catch (e) {
+          // Non-fatal: continue accumulating NAV samples through subsequent
+          // cycles even if a particular rebalance reverts.
+          append({
+            cycle: i,
+            step: "rebalance",
+            ok: false,
+            detail: errMsg(e),
+          });
+        }
+        tick();
+      }
+
+      // Top-up: ensure total elapsed >= 32d in case cycles × CYCLE_DAYS < 32.
+      const elapsedSoFar = cycles * BOOTSTRAP_CYCLE_DAYS;
+      const extra = Math.max(0, BOOTSTRAP_TARGET_DAYS - elapsedSoFar);
+      if (extra > 0) {
+        try {
+          await api.post("/admin/time/advance", {
+            seconds: extra * 86_400,
+          });
+          append({
+            cycle: cycles + 1,
+            step: `+${extra}d (top-up)`,
+            ok: true,
+          });
+        } catch (e) {
+          append({
+            cycle: cycles + 1,
+            step: "top-up",
+            ok: false,
+            detail: errMsg(e),
+          });
+        }
+      }
+      tick();
+
+      // Final qualify check (read-only). Hands off to the user — the
+      // QualifyCard above can run advance_if_passed when they're ready.
+      try {
+        const q = (await api.get("/admin/agents/{agent_id}/qualify", {
+          path: { agent_id: agentId },
+        })) as QualificationResponse;
+        const passed = q.checks.filter((c) => c.passed).length;
+        append({
+          cycle: cycles + 2,
+          step: "qualify check",
+          ok: q.overallPassed,
+          detail: `${passed} / ${q.checks.length} criteria pass`,
+        });
+      } catch (e) {
+        append({
+          cycle: cycles + 2,
+          step: "qualify check",
+          ok: false,
+          detail: errMsg(e),
+        });
+      }
+      tick();
+
+      setDone(true);
+      toast({
+        msg: `Bootstrap complete · agent #${agentId} ready for qualify`,
+      });
+    } catch (e) {
+      toast({ msg: `Bootstrap halted — ${errMsg(e)}`, variant: "error" });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="rounded-[12px] border border-hairline-light bg-canvas-light p-6">
+      <div className="eyebrow mb-3">Demo bootstrap</div>
+      <p className="text-[12.5px] text-shade-50 mb-4 leading-[1.5]">
+        Fast-forward an incubating agent to a state that passes all six
+        qualification criteria. Runs {BOOTSTRAP_DEFAULT_CYCLES} cycles of{" "}
+        <span className="mono">+{BOOTSTRAP_CYCLE_DAYS}d → rebalance</span>,
+        tops the clock past {BOOTSTRAP_TARGET_DAYS}d, then probes /qualify.
+        Use the Phase 2 qualification card above to advance to PublicLaunch
+        once this finishes.
+      </p>
+
+      {incubatingAgents.length === 0 ? (
+        <p className="text-[13.5px] text-shade-50">
+          No incubating agents to bootstrap.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3 mb-3">
+            <select
+              className="flex-1 rounded-[8px] border border-hairline-light bg-canvas-cream px-3 py-2.5 text-[14px] outline-none focus:border-ink"
+              value={agentId ?? ""}
+              onChange={(e) => setAgentId(Number(e.target.value))}
+              disabled={running}
+            >
+              {incubatingAgents.map((a) => (
+                <option key={a.agentId} value={a.agentId}>
+                  #{String(a.agentId).padStart(3, "0")} · {a.name} (${a.ticker})
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-[12.5px] text-shade-50">
+              Cycles
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={cycles}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v > 0 && v <= 30) setCycles(v);
+                }}
+                disabled={running}
+                className="w-16 rounded-[8px] border border-hairline-light bg-canvas-cream px-2 py-2 mono text-[14px] text-right outline-none focus:border-ink"
+              />
+            </label>
+            <Button
+              variant="aloe"
+              size="sm"
+              onClick={run}
+              disabled={running || !agentId}
+            >
+              {running ? "Bootstrapping…" : done ? "Run again" : "Start bootstrap"}
+            </Button>
+          </div>
+
+          {(running || log.length > 0) && (
+            <>
+              <div className="h-1.5 w-full overflow-hidden rounded-[3px] bg-canvas-soft">
+                <div
+                  className="h-full bg-aloe transition-all duration-200"
+                  style={{
+                    width: `${Math.min(100, (progress / totalSteps) * 100)}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-2 text-[11.5px] mono text-shade-50">
+                {progress} / {totalSteps} steps
+              </div>
+
+              <div className="mt-3 max-h-[160px] overflow-y-auto rounded-[8px] bg-canvas-cream p-3">
+                {log.length === 0 ? (
+                  <p className="text-[12px] text-shade-50">Starting…</p>
+                ) : (
+                  <ol className="flex flex-col gap-1">
+                    {log.map((l, i) => (
+                      <li
+                        key={i}
+                        className="flex justify-between gap-2 text-[11.5px] mono"
+                      >
+                        <span className="text-shade-60">
+                          cycle {String(l.cycle).padStart(2, "0")} ·{" "}
+                          {l.step}
+                        </span>
+                        <span
+                          className={cn(
+                            l.ok ? "text-emerald-helm" : "text-amber-helm",
+                          )}
+                        >
+                          {l.ok ? "✓" : "✗"}
+                          {l.detail ? ` ${l.detail}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function errMsg(e: unknown): string {
+  if (e instanceof ApiError) {
+    const d = e.detail;
+    if (d && typeof d === "object" && "message" in d) {
+      return String((d as { message: unknown }).message);
+    }
+    return `${e.status}`;
+  }
+  return (e as Error)?.message ?? String(e);
 }
 
 /* ─────────── Atoms ─────────── */
