@@ -73,6 +73,7 @@ export default function AdminPage() {
         <ManualTriggersCard />
         <QualifyCard />
         <DebugInspector />
+        <DangerZoneCard />
       </div>
     </main>
   );
@@ -123,6 +124,32 @@ function TimeAccelerationCard() {
           ? `${e.status}: ${JSON.stringify(e.detail)}`
           : ((e as Error)?.message ?? "Unknown error");
       toast({ msg: `Advance failed — ${msg}`, variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reset() {
+    if (!confirm("Reset TimeProvider offset to 0? This rolls back any +1d / +7d / +30d advances.")) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = (await api.post("/admin/time/reset", undefined)) as {
+        txHash?: string;
+        newCurrentTime?: number;
+      };
+      toast({
+        msg: "TimeProvider offset reset",
+        tx: r.txHash,
+      });
+      refetch();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? `${e.status}: ${JSON.stringify(e.detail)}`
+          : ((e as Error)?.message ?? "Unknown error");
+      toast({ msg: `Reset failed — ${msg}`, variant: "error" });
     } finally {
       setBusy(false);
     }
@@ -192,6 +219,15 @@ function TimeAccelerationCard() {
           disabled={busy}
         >
           +30d
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={reset}
+          disabled={busy}
+          className="ml-auto"
+        >
+          Reset
         </Button>
       </div>
     </AdminCard>
@@ -315,16 +351,21 @@ function ManualTriggersCard() {
 
   const agents = useMemo<AgentSummary[]>(() => data?.items ?? [], [data]);
 
-  // Default to first real (non-seed) agent the first time we get data.
+  // Default to the first agent in the list once we have data.
   if (agentId === null && agents.length > 0) {
-    const firstReal = agents.find((a) => a.agentId < 9000) ?? agents[0];
-    if (firstReal) {
-      setTimeout(() => setAgentId(firstReal.agentId), 0);
+    const first = agents[0];
+    if (first) {
+      setTimeout(() => setAgentId(first.agentId), 0);
     }
   }
 
   async function trigger(
-    op: "rebalance" | "harvest" | "distribute" | "nft-metadata",
+    op:
+      | "rebalance"
+      | "harvest"
+      | "distribute"
+      | "nft-metadata"
+      | "register-with-synthetics",
     label: string,
   ) {
     if (!agentId) {
@@ -338,7 +379,8 @@ function ManualTriggersCard() {
           | "/admin/agents/{agent_id}/rebalance"
           | "/admin/agents/{agent_id}/harvest"
           | "/admin/agents/{agent_id}/distribute"
-          | "/admin/agents/{agent_id}/nft-metadata",
+          | "/admin/agents/{agent_id}/nft-metadata"
+          | "/admin/agents/{agent_id}/register-with-synthetics",
         undefined,
         { path: { agent_id: agentId } },
       )) as { txHash?: string; distributeTxHash?: string | null };
@@ -377,8 +419,7 @@ function ManualTriggersCard() {
           )}
           {agents.map((a) => (
             <option key={a.agentId} value={a.agentId}>
-              #{String(a.agentId).padStart(3, "0")} · {a.name} (${a.ticker})
-              {a.agentId >= 9000 ? " · seed" : ""} · {a.phase}
+              #{String(a.agentId).padStart(3, "0")} · {a.name} (${a.ticker}) · {a.phase}
             </option>
           ))}
         </select>
@@ -416,6 +457,18 @@ function ManualTriggersCard() {
         >
           {busy === "nft-metadata" ? "…" : "Refresh NFT metadata"}
         </Button>
+        <Button
+          variant="outline-light"
+          size="sm"
+          disabled={busy !== null || !agentId}
+          onClick={() =>
+            trigger("register-with-synthetics", "Synthetic whitelist sync")
+          }
+        >
+          {busy === "register-with-synthetics"
+            ? "…"
+            : "Sync synthetic whitelists"}
+        </Button>
         <SlashAgentButton
           agentId={agentId}
           agentLabel={
@@ -428,7 +481,10 @@ function ManualTriggersCard() {
         executeRebalance tx. Harvest pulls yield to the agent vault.
         Distribute snapshots holders + transfers the holders&apos; share via
         DividendDistributor. NFT metadata regenerates and pins to IPFS.
-        Slash transitions the agent to Slashed phase + cascades wind-down.
+        Sync synthetic whitelists adds this vault to each sNVDA/sSPY/sAAPL/sTSLA/sMSFT
+        allow-list (only useful for agents registered before the auto-wire fix
+        — new ones don&apos;t need it). Slash transitions the agent to Slashed
+        phase + cascades wind-down.
       </p>
     </div>
   );
@@ -966,6 +1022,66 @@ function DebugAccordion({
 }
 
 /* ─────────── Atoms ─────────── */
+
+/* ─────────── Danger zone — wipe indexer ─────────── */
+
+function DangerZoneCard() {
+  const { push: toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const phrase = "wipe all";
+
+  async function run() {
+    if (confirmText.trim().toLowerCase() !== phrase) {
+      toast({ msg: `Type "${phrase}" to confirm`, variant: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post("/admin/wipe-all", undefined);
+      toast({ msg: "Indexer state wiped — agents/decisions/dividends gone" });
+      setConfirmText("");
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? `${e.status}: ${JSON.stringify(e.detail)}`
+          : ((e as Error)?.message ?? "Unknown error");
+      toast({ msg: `Wipe failed — ${msg}`, variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="lg:col-span-2 rounded-[12px] border border-red-helm/30 bg-red-bg/10 p-6">
+      <div className="eyebrow mb-2" style={{ color: "var(--phase-slashed-text)" }}>
+        Danger zone
+      </div>
+      <p className="text-[13px] mb-3" style={{ color: "var(--phase-slashed-text)" }}>
+        Wipes all indexer state — agents, decisions, dividends, NAV history.
+        On-chain contracts are untouched. Use after redeploying contracts so the
+        BE re-indexes from a clean slate.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={`Type "${phrase}" to confirm`}
+          className="rounded-[8px] border border-hairline-light bg-canvas-cream px-3 py-2 mono text-[13px] outline-none focus:border-ink min-w-[200px]"
+        />
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={run}
+          disabled={busy || confirmText.trim().toLowerCase() !== phrase}
+        >
+          {busy ? "Wiping…" : "Wipe all indexer data"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function AdminCard({
   label,

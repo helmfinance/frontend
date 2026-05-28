@@ -8,27 +8,27 @@
     "faucetUrl": "https://faucet.sepolia.mantle.xyz"
   },
   "contracts": {
-    "registry":         "0x069719287B7234f9B005Be16766702dD53047b84",
-    "agentNFT":         "0x5099bd07CEFf8B0Eb9824F0BCa52293F4b8eb2C1",
-    "distributor":      "0xc0F99830BE04835B97F07BA927589FE1c2cCbd50",
-    "redemptionQueue":  "0xECed7c86B3c3848f853B43519a080FB3e6815A4e",
-    "treasury":         "0x4A19662901Cd6326fB0052BCDfbfD5b504eFd3B5",
-    "harvester":        "0x5486eD748244f0823d48D71268Fd92735eb356d1",
-    "pythAdapter":      "0xe666D9e73E9AF83B0e0d21B03126661Eb1B8cB9e",
-    "timeProvider":     "0x0A7aeB1c658A672C6794C36818dFFEe4bAcB082F",
-    "mEthAdapter":      "0x8ae0c4B70a90406bb593457751029379E1779f6B",
-    "usdyAdapter":      "0x025f9E23C5a3962505Bb580009b0c47c820dd241",
-    "usdc":             "0x468dAe9a460ABAb95e950d6113F199A6a0123906",
-    "agentTokenImpl":   "0x0631DfBcaA33306Ef93d21EcF8B81541bAb211D9",
-    "agentVaultImpl":   "0x95b7afc8f5e0C03847913bA1704de25a442a03d2",
-    "founderVaultImpl": "0xDFA6e85654D062AD656696E91bd579803000FE22"
+    "registry":         "0x9add2f9f68BF6c9F2FD793e28eB5ffC89c324Cd5",
+    "agentNFT":         "0x82CA41A9DB4974a0cF54Ad9ebcB5aad081fED8B8",
+    "distributor":      "0x71B9d08cbc8327C5EBe6809dA06f7BFE52479D87",
+    "redemptionQueue":  "0xAD958390FD07498408c129F22aFfdcFfb6B519d4",
+    "treasury":         "0x07e4daA80a86C7a8Ee3172b93E413C952221295D",
+    "harvester":        "0xa5f4587D5D4D92cE6e721a4ccD4037981128A153",
+    "pythAdapter":      "0x51E53801ec5D1fcE53780b5C69492176F72cc54e",
+    "timeProvider":     "0x908E9154138D958ED095b87e548738d1C5E75a00",
+    "mEthAdapter":      "0x78B4bA3342Eb4b1aD74ba534E26cDD12006c6e43",
+    "usdyAdapter":      "0x35D73601662a614cBD7fa1503935A65D89f2E201",
+    "usdc":             "0x903c727Dd011bD8A3a1ce522fe26Bc071EE07Bfe",
+    "agentTokenImpl":   "0x22efE697dE33080F237a07E6b86735830Aebe15A",
+    "agentVaultImpl":   "0x9eE284115f8bd5134c5ba5eD208518165a0EbE33",
+    "founderVaultImpl": "0x1336e5cFDA3cd5710de0E7Cc5e3da762777951e6"
   },
   "syntheticAssets": {
-    "sNVDA": "0xEc7D5CEFFCD2242Ca95349624bCDBE0D895c8B5f",
-    "sSPY":  "0x119fc91D7BFb14BA68924e48445fF3C0DD62C63f",
-    "sAAPL": "0xA47224ED4ab2a8F89F5d13EBAb7832040274D82b",
-    "sTSLA": "0x18bfBe3Ff72dA0B3dfC6574762AC617A5F6c5533",
-    "sMSFT": "0x2D5Dcbe20C21b34dBf6556411A1a19593e4ccbD9"
+    "sNVDA": "0x985CfD4339DeFf8f0Bf3712008E4Cd143ddfFD09",
+    "sSPY":  "0x57a4DE159C392e4222F2c84ebb7470d6615Aa8cE",
+    "sAAPL": "0xaEc5975ecB0F879aEB58833Accb8078C4697e930",
+    "sTSLA": "0x32Da445504A2FBE0123320730F9823Cb0f960e6E",
+    "sMSFT": "0x7B2261D64b96b0fC633420B3567D12996FEF5238"
   },
   "externalContracts": {
     "pyth": "0x98046Bd286715D3B0BC227Dd7a956b83D8978603"

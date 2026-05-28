@@ -75,7 +75,6 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
   const { push: toast } = useToast();
 
   const vaultAddress = agent.vaultAddress as `0x${string}`;
-  const isSeed = agent.agentId >= 9000;
 
   /* ─── Balances + allowance ─── */
   const { data: usdcBalance, refetch: refetchUsdc } = useReadContract({
@@ -417,8 +416,7 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
               !validation.ok ||
               !preview ||
               !isConnected ||
-              !onCorrectChain ||
-              isSeed
+              !onCorrectChain
             }
             onClick={executeMint}
           >
@@ -460,11 +458,6 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
       dismissible={dismissible}
     >
       {/* Pre-flight inline warnings */}
-      {isSeed && (
-        <InlineBox variant="warn">
-          Seed agent — chain calls revert. Use a real on-chain agent for tx demos.
-        </InlineBox>
-      )}
       {!isConnected && (
         <InlineBox variant="info">
           <p className="mb-2 text-[13.5px]">

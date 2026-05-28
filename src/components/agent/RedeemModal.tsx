@@ -85,7 +85,6 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
 
   const tokenAddress = agent.tokenAddress as `0x${string}`;
   const navPerShare = agent.navPerShareUsdc ? BigInt(agent.navPerShareUsdc) : 0n;
-  const isSeed = agent.agentId >= 9000;
 
   /* ─── Balance + allowance ─── */
   const { data: agtBalance, refetch: refetchAgt } = useReadContract({
@@ -302,7 +301,6 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
               !preview ||
               !isConnected ||
               !onCorrectChain ||
-              isSeed ||
               agtBal === 0n
             }
             onClick={executeRedeem}
@@ -336,11 +334,6 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
       dismissible={dismissible}
     >
       {/* Pre-flight inline */}
-      {isSeed && (
-        <InlineBox variant="warn">
-          Seed agent — chain calls revert.
-        </InlineBox>
-      )}
       {!isConnected && (
         <InlineBox variant="info">
           <p className="mb-2 text-[13.5px]">Connect a wallet to redeem.</p>
@@ -360,7 +353,7 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
           </Button>
         </InlineBox>
       )}
-      {isConnected && onCorrectChain && !isSeed && agtBal === 0n && (
+      {isConnected && onCorrectChain && agtBal === 0n && (
         <InlineBox variant="info">
           <p className="text-[13.5px]">
             You don&apos;t hold any {agent.ticker} shares yet.

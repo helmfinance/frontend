@@ -130,7 +130,6 @@ export default function AgentDetailPage() {
 
   if (!data) return null;
 
-  const isSeed = id >= 9000;
   const isFounder =
     !!address &&
     data.founderAddress?.toLowerCase() === address.toLowerCase();
@@ -188,7 +187,6 @@ export default function AgentDetailPage() {
                   {formatAddress(data.vaultAddress)}
                 </a>
               </span>
-              {isSeed && <Tag variant="outline">Seed</Tag>}
               {isFounder && <Tag variant="mint">You are founder</Tag>}
             </div>
 
@@ -306,7 +304,6 @@ export default function AgentDetailPage() {
           <ActionCard
             agent={data}
             dailyDelta={dailyDelta}
-            isSeed={isSeed}
             initialAction={initialAction}
           />
           <StructuralDefenseCard data={data} />
@@ -1216,19 +1213,17 @@ function DecisionRows({ decisions }: { decisions: Decision[] }) {
 function ActionCard({
   agent,
   dailyDelta,
-  isSeed,
   initialAction,
 }: {
   agent: AgentDetail;
   /** Real 24h NAV-per-share delta from /nav-history. null = <2 data points. */
   dailyDelta: number | null;
-  isSeed: boolean;
   initialAction: "mint" | "redeem" | null;
 }) {
   const isWindDown = agent.phase === "WindDown";
   const isIncubation = agent.phase === "Incubation";
-  const canMint = !isSeed && !isWindDown && agent.phase !== "Settled";
-  const canRedeem = !isSeed && agent.phase !== "Settled";
+  const canMint = !isWindDown && agent.phase !== "Settled";
+  const canRedeem = agent.phase !== "Settled";
   const noData = dailyDelta === null;
   const positive = !noData && dailyDelta >= 0;
   const isZero = !noData && dailyDelta === 0;
@@ -1336,14 +1331,6 @@ function ActionCard({
           )}
         </div>
 
-        {isSeed && (
-          <p
-            className="mt-4 rounded-[8px] bg-pistachio px-3 py-2 text-[11.5px]"
-            style={{ color: "var(--pistachio-text-strong)" }}
-          >
-            Seed agent — chain calls revert. Use a real on-chain agent for tx demos.
-          </p>
-        )}
       </div>
 
       <MintModal
