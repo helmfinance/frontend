@@ -1077,13 +1077,15 @@ function BenchKpi({
   );
 }
 
-/* ─────────── Decision log (paginated + fallback) ─────────── */
+/* ─────────── Decision log (paginated) ─────────── */
 
 function PaginatedDecisionList({
   agentId,
   fallback,
 }: {
   agentId: number;
+  /** recentDecisions from the agent detail — shown only if the paginated
+   *  endpoint has a transient failure, so the section never goes blank. */
   fallback: Decision[];
 }) {
   const [offset, setOffset] = useState(0);
@@ -1096,7 +1098,6 @@ function PaginatedDecisionList({
         query: { limit: DECISIONS_PAGE_SIZE, offset },
       }) as Promise<DecisionPage>,
     staleTime: 15_000,
-    retry: false,
   });
 
   if (isLoading) {
@@ -1112,21 +1113,22 @@ function PaginatedDecisionList({
     );
   }
 
-  // /decisions is currently a schema-only stub on the BE (returns HTTP 501).
-  // Fall back to the recentDecisions slice embedded in the agent detail —
-  // smaller but real data, so the section still tells the story.
+  // Defensive fallback: if the paginated query errors transiently, show the
+  // recentDecisions slice embedded in the agent detail rather than a blank
+  // error. The endpoint itself is live, so this is rare.
   if (isError || !data) {
     if (fallback.length === 0) {
       return (
         <p className="text-[13.5px] text-shade-50">
-          No recorded decisions yet.
+          Couldn&apos;t load decision history — try refreshing.
         </p>
       );
     }
     return (
       <>
         <p className="text-[12px] text-shade-50 mb-3">
-          Showing {fallback.length} recent decision{fallback.length === 1 ? "" : "s"} · pagination coming once BE indexer exposes the full log.
+          Showing the most recent {fallback.length} decision
+          {fallback.length === 1 ? "" : "s"} (history temporarily unavailable).
         </p>
         <DecisionRows decisions={fallback} />
       </>

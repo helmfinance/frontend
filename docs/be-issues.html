@@ -182,12 +182,13 @@
     width: 100%;
     border-collapse: collapse;
     margin: 10px 0;
-    font-size: 13px;
+    font-size: 12.5px;
   }
   table.diff th, table.diff td {
     text-align: left;
     padding: 8px 12px;
     border-bottom: 1px solid var(--hairline-soft);
+    font-family: var(--mono);
   }
   table.diff th {
     background: var(--canvas-cream);
@@ -195,15 +196,22 @@
     color: var(--shade-50);
     font-size: 11px;
     letter-spacing: 0.06em;
+    font-family: var(--ui);
   }
-  table.diff td.actual.bad { color: var(--red); font-family: var(--mono); }
-  table.diff td.expected   { color: var(--emerald); font-family: var(--mono); }
+  table.diff td.fe  { color: var(--red); }
+  table.diff td.be  { color: var(--emerald); }
+  table.diff td.lbl { color: var(--ink); font-family: var(--ui); }
 
-  hr.sep {
-    border: 0;
-    border-top: 1px dashed var(--pistachio-divider);
-    margin: 18px 0;
+  .resolved-note {
+    background: var(--emerald-bg);
+    border: 1px solid color-mix(in srgb, var(--emerald) 25%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 28px;
+    font-size: 13.5px;
+    color: var(--ink);
   }
+  .resolved-note strong { color: var(--emerald); }
 
   footer.page {
     margin-top: 56px;
@@ -220,449 +228,152 @@
 
   <header class="page">
     <div class="eyebrow">Helm · 백엔드 ↔ 프론트엔드</div>
-    <h1>백엔드 이슈 목록 (프론트엔드에서 발견한 것)</h1>
+    <h1>백엔드 이슈 정리 (프론트엔드에서 발견한 것)</h1>
     <p class="subtitle">
       Mantle Sepolia 백엔드를 사용하면서 프론트엔드 측에서 발견한 이슈를
       모아둔 문서입니다. 새로 발견되는 항목은 같은 형식으로 계속 추가하고,
-      해결된 항목은 상태 배지를 <span class="pill status-fixed">fixed</span>
-      로 변경합니다.
+      해결된 항목은 목록에서 제거합니다.
     </p>
     <div class="meta">
-      <span>최종 수정: 2026-05-28 (open 6건)</span>
+      <span>최종 수정: 2026-05-29 (open 2건)</span>
       <span>FE 리포: <code>helmfinance/frontend</code></span>
       <span>BE 호스트: <code>web-production-acacf1.up.railway.app</code></span>
     </div>
   </header>
 
-  <!-- ========================================================== -->
-  <!-- 이슈 1                                                       -->
-  <!-- ========================================================== -->
-  <article class="issue" id="issue-decisions-stub">
-    <header>
-      <span class="pill status-open">open</span>
-      <span class="pill sev-medium">medium</span>
-      <h2>1. <code>GET /agents/{id}/decisions</code> 응답이 501 — schema-only stub 상태</h2>
-    </header>
-    <p class="summary">
-      에이전트 상세 페이지의 "Decision log" 영역은 그 에이전트가 그동안 한
-      행동들(자산 리밸런싱, 수익 회수, 배당 분배 등)을 시간순으로 보여줘야
-      하는 자리인데, 전체 이력을 페이지 단위로 끊어서 가져오는 API 가 아직
-      비어 있어서 호출하면 매번 실패합니다. 그래서 화면에는 가장 최근 1~2건만
-      나오고 그 이전 기록은 사용자가 아예 볼 수 없습니다.
-    </p>
-
-    <h3>재현</h3>
-    <pre class="shell">curl -i https://web-production-acacf1.up.railway.app/agents/3/decisions?limit=10</pre>
-    <pre>HTTP/2 501
-{"detail":{"error":"InternalError","message":"Not implemented yet — schema-only stub."}}</pre>
-
-    <h3>기대 동작</h3>
-    <p>
-      <code>Page[Decision]</code> 형태로 <code>decisions</code> 테이블에서
-      페이지네이션된 row 를 반환해주는 것. OpenAPI 스키마에는 이미 정의되어
-      있어서 FE 의 타입 생성기가 이 모양을 기준으로 코드를 만들어두고
-      있습니다.
-    </p>
-
-    <h3>프론트엔드 영향</h3>
-    <ul>
-      <li>Detail 페이지의 Decision log 섹션 페이지네이션 불가능.</li>
-      <li>
-        현재는 <code>AgentDetail.recentDecisions</code> 의 작은 슬라이스로
-        폴백해서 보여주고 "<em>pagination coming once BE indexer exposes the
-        full log</em>" 라는 안내를 띄우고 있습니다. 임시로는 동작하지만 그
-        외 히스토리는 사용자가 볼 방법이 없습니다.
-      </li>
-    </ul>
-
-    <h3>권장 수정</h3>
-    <p>
-      <code>recentDecisions</code> 를 채우는 데이터 소스를 그대로 페이지네이션
-      핸들러에 연결하면 됩니다. 필요한 쿼리 파라미터는 이미 스펙에 있습니다:
-      <code>limit</code>, <code>offset</code>, <code>type</code>.
-    </p>
-  </article>
+  <div class="resolved-note">
+    <strong>이전 6건 모두 해결 완료.</strong>
+    (decisions 페이지네이션, mandate/validate, founderVault 연결,
+    phase 불일치, weightConstraints 심볼화, rebalance 503) — 프론트엔드에
+    전부 반영했습니다. 아래는 그 과정에서 새로 발견한 항목입니다.
+  </div>
 
   <!-- ========================================================== -->
-  <!-- 이슈 2                                                       -->
+  <!-- 이슈 A                                                       -->
   <!-- ========================================================== -->
-  <article class="issue" id="issue-mandate-validate-stub">
-    <header>
-      <span class="pill status-open">open</span>
-      <span class="pill sev-high">high</span>
-      <h2>2. <code>POST /mandate/validate</code> 응답이 501 — schema-only stub 상태</h2>
-    </header>
-    <p class="summary">
-      에이전트를 새로 만드는 등록 페이지의 2단계는, LLM 이 자연어 운용 방침을
-      해석해서 자산 비중·락업 일수·캐리 등 숫자값을 정해주면 founder 가 그
-      값을 한 번 더 손볼 수 있게 해주는 자리입니다. 그런데 값을 하나라도
-      수정하면 백엔드가 새 값을 다시 검증하고 해시를 재계산해줘야 하는데
-      그 API 가 비어 있어서 매번 실패합니다. 그래서 프론트엔드는 수정을 감지하면
-      자동으로 원래 LLM 결과로 되돌리고 "지금은 수정 못 합니다" 안내를
-      띄우는 상태입니다. 결과적으로 2단계 편집 기능이 사실상 죽어 있습니다.
-    </p>
-
-    <h3>재현</h3>
-    <pre class="shell">curl -i -X POST https://web-production-acacf1.up.railway.app/mandate/validate \
-  -H "Content-Type: application/json" \
-  -d '{"mandate": &lt;valid MandateSchema body&gt;}'</pre>
-    <pre>HTTP/2 501
-{"detail":{"error":"InternalError","message":"Not implemented yet — schema-only stub."}}</pre>
-
-    <h3>기대 동작</h3>
-    <p>
-      <code>MandateValidateResponse</code> 형태 — OpenAPI 가 정의한 그대로
-      <code>{ valid, errors, hash }</code>. 사용자가 <code>/mandate/parse</code>
-      후 손으로 수정한 mandate 를 받아서 다시 canonical 해시 + 등록 가능한
-      bound body 를 돌려주는 게 목적입니다.
-    </p>
-
-    <h3>프론트엔드 영향</h3>
-    <ul>
-      <li>
-        Launch-agent wizard (<code>/register</code>) Stage 2 에서 founder 가
-        파싱된 값을 수정할 수 있도록 만들어둔 inline 편집기 (carry / weights /
-        lockup days 등) 가 무력화됩니다. validate 가 없으면 hash 를 다시 만들
-        수 없어서 on-chain 등록 시 stale hash 가 들어갑니다.
-      </li>
-      <li>
-        지금은 FE 가 501 을 명시적으로 잡아서 원본 파싱값 + 해시로 롤백하고
-        모든 input 을 잠근 다음 "<em>Manual edits paused — backend
-        /mandate/validate isn't implemented yet</em>" 안내를 띄웁니다. founder
-        는 수정하지 않은 mandate 그대로 진행하거나 Stage 1 로 돌아가 자연어를
-        다시 써서 재파싱해야 합니다.
-      </li>
-      <li>
-        실질적으로 Stage 2 편집 기능이 죽은 상태이며, 미세 조정은 LLM 프롬프트
-        재작성이 유일한 우회 경로입니다.
-      </li>
-    </ul>
-
-    <h3>권장 수정</h3>
-    <p>
-      검증 룰 자체는 이미 <code>app/mandate/rules.py</code> 에 있는 걸로 보입니다.
-      이걸 엔드포인트에 연결하고, canonical JSON 에 대해 <code>compute_mandate_hash</code>
-      를 호출하고, 필요하면 IPFS 재 pin 까지 처리하면 끝납니다.
-    </p>
-  </article>
-
-  <!-- ========================================================== -->
-  <!-- 이슈 3                                                       -->
-  <!-- ========================================================== -->
-  <article class="issue" id="issue-founder-vault-not-linked">
+  <article class="issue" id="issue-address-drift">
     <header>
       <span class="pill status-blocked">blocking</span>
       <span class="pill sev-critical">critical</span>
-      <h2>3. 새로 등록한 에이전트의 FounderVault 가 BE 응답에 연결되지 않음</h2>
+      <h2>A. 컨트랙트 재배포 후 프론트엔드 주소록(addresses.json) 이 통째로 어긋남</h2>
     </header>
     <p class="summary">
-      새 에이전트를 등록하면 마켓플레이스에는 약간의 인덱싱 지연 후 정상적으로
-      카드로 노출됩니다. 그런데 founder 본인이 자기 락업 share / 락업 만료일
-      / 미청구 carry 같은 정보를 보고 carry 청구 / 출금 / 강제 wind-down
-      액션을 눌러야 하는 두 자리 — 포트폴리오 페이지의 "Founder" 탭과
-      에이전트 상세 페이지의 "Structural defense" 카드 — 는 시간이 충분히
-      지나도 계속 비어 있습니다. 체인에는 FounderVault 가 정상적으로 만들어져
-      있고 디버그 API 로는 정상 조회되지만, 백엔드가 에이전트 등록 시점에
-      "이 에이전트의 founder vault 는 이 주소" 라는 연결 정보를 agent 데이터에
-      박지 않아서 일반 API 응답에서만 누락된 상태입니다. 결과적으로 founder
-      가 자기 자산을 어디서도 볼 수 없고 founder 전용 액션이 모두 막힙니다.
+      컨트랙트를 다시 배포할 때마다 모든 컨트랙트 주소가 새로 생기는데,
+      프론트엔드가 들고 있는 주소록이 이전 배포의 것으로 남아 있었습니다.
+      백엔드는 새 주소로 갱신돼 있어서 — 백엔드를 거치는 화면(마켓플레이스,
+      포트폴리오 등)은 멀쩡해 보이지만, 프론트엔드가 체인에 직접 거는 동작
+      (민트, 시간 가속 시계 표시 등)은 모두 존재하지 않거나 다른 컨트랙트를
+      가리켜서 조용히 실패합니다.
     </p>
 
-    <h3>재현</h3>
-    <ol>
-      <li>FE 의 <code>/register</code> 화면에서 founder 가 <code>registerAgent(...)</code> 호출.</li>
-      <li>트랜잭션 confirm. BE indexer 가 agent row 를 생성.</li>
-      <li>FE 가 <code>/agents/{id}</code> 와 <code>/portfolio/{address}</code> 를 호출.</li>
-    </ol>
-
-    <h3>관찰된 상태 (현재 Sepolia 배포의 agent #3 기준)</h3>
+    <h3>관찰된 상태</h3>
+    <p>
+      프론트엔드 <code>addresses.json</code> 과 백엔드
+      <code>GET /system/info</code> 의 주소를 전수 비교한 결과,
+      <strong>13개 컨트랙트 + 5개 합성자산 전부 불일치</strong>였습니다.
+      예시:
+    </p>
     <table class="diff">
-      <thead><tr><th>출처</th><th>FounderVault 데이터</th></tr></thead>
+      <thead><tr><th class="lbl">컨트랙트</th><th>FE (구 배포)</th><th>BE (현 배포)</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>GET /admin/debug/agents/3/founder-vault</code></td>
-          <td class="expected">
-            address <code>0x2a548e55…</code> ·
-            totalSharesHeld <code>995e18</code> ·
-            lockupEndsAt <code>1798097437</code>
-          </td>
-        </tr>
-        <tr>
-          <td><code>GET /agents/3</code> → <code>.founderVault</code></td>
-          <td class="actual bad">null</td>
-        </tr>
-        <tr>
-          <td><code>GET /portfolio/0xfe3a…</code> → <code>.founderVaults</code></td>
-          <td class="actual bad">[ ]</td>
-        </tr>
+        <tr><td class="lbl">registry</td><td class="fe">0x9add2f9f…</td><td class="be">0x120CADfa…</td></tr>
+        <tr><td class="lbl">usdc</td><td class="fe">0x903c727D…</td><td class="be">0xd5a92Cf8…</td></tr>
+        <tr><td class="lbl">timeProvider</td><td class="fe">0x908E9154…</td><td class="be">0xce2aE0a3…</td></tr>
+        <tr><td class="lbl">sNVDA</td><td class="fe">0x985CfD43…</td><td class="be">0xa3beDd97…</td></tr>
       </tbody>
     </table>
 
-    <p>
-      체인에는 FounderVault 가 정상적으로 존재하고 디버그 엔드포인트로는
-      잘 읽어옵니다. 다만 agent row 가 그 주소와 연결되어 있지 않아서
-      퍼블릭 응답인 detail 과 portfolio 양쪽 모두 이 정보를 누락합니다.
-    </p>
-
     <h3>프론트엔드 영향</h3>
     <ul>
       <li>
-        직전 재배포 이후 등록한 founder 의 Portfolio "Founder" 탭이 항상
-        비어 있습니다. 락업된 share, 미청구 carry, 강제 wind-down 트리거
-        등이 전부 founder-vault 목록에 의존하기 때문에 사용 불가합니다.
+        체인에 직접 거는 모든 트랜잭션(민트, 환매, founder 액션, 에이전트
+        등록)이 존재하지 않는/잘못된 컨트랙트를 호출해서 실패.
       </li>
       <li>
-        Detail 페이지의 <em>Structural defense</em> 카드도 founder withdraw
-        진행률 / cap 진행률을 그릴 수 없습니다 (역시 <code>data.founderVault</code> 의존).
-      </li>
-      <li>
-        해커톤 데모에서 founder 라이프사이클 (런칭 → carry → withdraw 등) 을
-        보여주려면 이 부분이 먼저 풀려야 합니다.
+        어드민 "시간 가속" 카드가 잘못된 TimeProvider 의 시계를 읽어서,
+        백엔드가 실제로 advance 하는 시계와 한 달 가까이 차이나는 값을 표시.
       </li>
     </ul>
 
-    <h3>권장 수정</h3>
+    <h3>프론트엔드 측 조치 (완료)</h3>
     <p>
-      <code>AgentRegistered</code> 이벤트 핸들러에서 FounderVault 주소까지
-      함께 가져와 agent row 에 저장하면 됩니다. 이벤트 페이로드에 직접
-      들어있지 않다면 <code>registry.deploymentOf(agentId).founderVault</code>
-      로 한 번 더 읽어서 채워주면 충분합니다. 그 뒤로는
-      <code>/agents/{id}</code> 직렬화와 <code>/portfolio</code> 집계 둘 다
-      자동으로 정상화됩니다.
+      <code>GET /system/info</code> 를 기준으로 <code>addresses.json</code>
+      을 전면 교체했습니다. ABI 는 재배포 전후로 동일해서 그대로 사용
+      가능했습니다.
+    </p>
+
+    <h3>백엔드 측 요청</h3>
+    <p>
+      재배포할 때 프론트엔드도 같은 주소록을 받을 수 있도록, 새 주소 세트를
+      한곳(예: <code>frontend-package/addresses.json</code>)에서 항상
+      최신으로 유지해 주시면 좋겠습니다. 지금은 재배포 사실을 프론트엔드가
+      알 방법이 없어 매번 직접 <code>/system/info</code> 와 대조해야 합니다.
     </p>
   </article>
 
   <!-- ========================================================== -->
-  <!-- 이슈 4                                                       -->
+  <!-- 이슈 B                                                       -->
   <!-- ========================================================== -->
-  <article class="issue" id="issue-phase-divergence">
-    <header>
-      <span class="pill status-open">open</span>
-      <span class="pill sev-medium">medium</span>
-      <h2>4. <code>registry.phaseOf</code> 와 <code>vault.phase</code> 가 어긋날 수 있음 (auto-advance 시점)</h2>
-    </header>
-    <p class="summary">
-      에이전트가 지금 어느 단계(인큐베이션 / 공개 운영 / 와인드다운 등)인지를
-      체인에서 두 곳의 컨트랙트가 따로 기록하는데, 이 둘이 가끔 서로 다른
-      답을 줍니다. 운용 vault 는 "공개 운영 중" 이라고 하는데 registry 는
-      여전히 "인큐베이션 중" 이라고 답하는 식입니다. 백엔드가 vault 기준으로
-      응답해서 사용자에게는 거의 안 보이지만, 어드민 페이지에서 "공개 운영
-      단계로 승급" 버튼을 눌렀을 때 한쪽은 이미 끝난 줄 알고 한쪽은 아직
-      안 한 줄 알아서 실패하는 경우가 생길 수 있습니다.
-    </p>
-
-    <h3>관찰된 상태</h3>
-    <p>
-      이전 배포의 agent #21 테스트 중, AgentVault 의 내부 phase 는
-      PublicLaunch 로 advance 되어 있었고 (<code>mintsAllowed</code>
-      modifier 통과 + BE 의 <code>/agents/21.phase</code> 도
-      <code>"PublicLaunch"</code> 응답), 같은 시점 체인의
-      <code>registry.phaseOf(21)</code> 은 <code>0 = Incubation</code> 을
-      반환했습니다.
-    </p>
-    <p>
-      이 split-brain 은 BE 응답을 기준으로 보면 보이지 않지만 (BE 는 vault
-      를 미러링), 슬래시 흐름이나 Settled 전환, 그리고 registry phase 를
-      참고하는 외부 인덱서 입장에서 agent 가 public 인지 아닌지에 대한
-      해석이 갈리게 됩니다.
-    </p>
-
-    <h3>프론트엔드 영향</h3>
-    <ul>
-      <li>낮음 — FE 는 BE 응답을 따르고 BE 는 vault 를 미러링합니다.</li>
-      <li>
-        <code>/admin/agents/{id}/qualify</code> POST 가 vault 와 registry 의
-        상태 차이에 따라 <code>AlreadyAdvanced</code> 로 revert 될 수
-        있습니다.
-      </li>
-    </ul>
-
-    <h3>권장 수정</h3>
-    <p>
-      vault.phase 를 advance 하는 경로 중에서 <code>registry.advanceToPublic(agentId)</code>
-      를 호출하지 않는 코드가 어디인지 확인해야 합니다. 둘이 항상 같이 갱신되도록
-      on-chain 단에서 lockstep 으로 묶거나, BE 가 drift 를 감지해서
-      <code>advanceToPublic</code> 을 호출해주는 reconciliation step 을 추가하면
-      됩니다.
-    </p>
-  </article>
-
-  <!-- ========================================================== -->
-  <!-- 이슈 5                                                       -->
-  <!-- ========================================================== -->
-  <article class="issue" id="issue-mandate-weight-classname">
+  <article class="issue" id="issue-time-advance-large-jump">
     <header>
       <span class="pill status-open">open</span>
       <span class="pill sev-high">high</span>
-      <h2>5. LLM mandate 파서가 <code>weightConstraints.asset</code> 에 자산 심볼 대신 클래스명을 넣음</h2>
+      <h2>B. <code>POST /admin/time/advance</code> 가 큰 점프(예: +30일)를 실제로 반영하지 않음</h2>
     </header>
     <p class="summary">
-      에이전트 등록 페이지에서 사용자가 "주식 60-80%, 채권 10-30%" 같은
-      자연어 운용 방침을 쓰면, 백엔드가 LLM 으로 그걸 해석해서 자산별 비중
-      한도를 정해줍니다. 그런데 이 결과가 카테고리 이름 그대로 ("주식 60-80%",
-      "채권 10-30%") 저장되어 들어옵니다. 컨트랙트는 카테고리가 아니라
-      개별 자산(예: sNVDA, sMSFT) 단위로만 비중을 받기 때문에, 프론트엔드는
-      어쩔 수 없이 6개 자산을 1/6 씩 균등 분배(±2%)로 우회 등록합니다.
-      결과적으로 사용자가 원래 의도한 자산군별 비중(주식 60-80%, 채권 10-30%
-      등)이 등록 단계에서 사라지고, 이후 운용(rebalance)도 그 균등 비중
-      기준으로 돌아가게 됩니다.
+      어드민 화면의 시간 가속(+30일 등)을 호출하면 백엔드는 정상(200)으로
+      응답하지만 체인의 시계가 실제로는 거의 움직이지 않습니다. 작은 점프
+      (+2일)는 동작하는 것으로 보이는데 큰 점프는 반영이 안 돼서, 데모에서
+      인큐베이션 30일을 빠르게 건너뛰는 시나리오가 막힙니다.
     </p>
 
     <h3>관찰된 상태</h3>
     <p>
-      일반적인 자연어 mandate ("AI mega-cap tech, equity 60-80% / treasury
-      10-30%, …") 를 <code>POST /mandate/parse</code> 에 넣으면 다음과 같은
-      응답이 옵니다.
+      <code>+30일(2592000초)</code> 을 요청했을 때 응답과 실제 체인 시계가
+      서로 맞지 않았습니다.
     </p>
-    <pre>"targetUniverse": ["sAAPL","sMSFT","sNVDA","sTSLA","sSPY","USDY"],
-"weightConstraints": [
-  {"asset": "equity",   "minBps": 6000, "maxBps": 8000},
-  {"asset": "treasury", "minBps": 1000, "maxBps": 3000},
-  {"asset": "cash",     "minBps":    0, "maxBps": 3000}
-]</pre>
+    <pre>요청:   POST /admin/time/advance  { "seconds": 2592000 }
+응답:   200  { "advancedSeconds": 2592000, "newCurrentTime": 1782871045 }
 
-    <h3>기대 동작</h3>
+호출 전 on-chain currentTime: 1787968641
+호출 후 on-chain currentTime: 1787968649   ← +8초 (실제 경과시간만)</pre>
     <p>
-      <code>weightConstraints[].asset</code> 은 <code>targetUniverse</code>
-      에 등장하는 개별 심볼 (예: <code>"sNVDA"</code>, <code>"USDY"</code>) 이
-      들어가야 합니다. 컨트랙트의 <code>struct WeightConstraint { address
-      asset; uint16 minBps; uint16 maxBps; }</code> 가 자산 단위로 받기 때문에,
-      FE 가 심볼 → address 매핑을 하기 위해서도 이 단위가 필요합니다.
+      응답이 알려준 <code>newCurrentTime(1782871045)</code> 은 호출 전 실제
+      시계(1787968641)보다 오히려 과거이고, 호출 후 체인 시계는 30일이
+      아니라 8초만 움직였습니다. 즉 advance 가 누적되지 않거나 큰 값에서
+      적용되지 않는 것으로 보입니다.
     </p>
 
     <h3>프론트엔드 영향</h3>
     <ul>
       <li>
-        FE 는 <code>"equity"</code> 같은 클래스명을 <code>SYNTHETIC_ASSETS</code>
-        의 어떤 주소와도 매칭하지 못하기 때문에 6개 자산이 전부 FE 의 fallback
-        밴드 (<code>10000 / N ± 200bps</code>) 로 등록됩니다.
+        어드민의 "Demo bootstrap" 마지막 단계에서 인큐베이션 일수를 30일
+        이상으로 끌어올리지 못합니다. (운용 결정/NAV 누적 등 다른 자격 기준은
+        이미 정상 충족되는 것을 확인 — rebalance 수정 덕분.)
       </li>
       <li>
-        agent #3 에서 확인됨: <code>vault.weightConstraintOf(asset)</code> 가
-        sNVDA / sSPY / sAAPL / sTSLA / sMSFT / USDY 6개 자산 모두에 대해
-        <code>1466 / 1866</code> (14.66% – 18.66%) 을 반환합니다.
-      </li>
-      <li>
-        결과적으로 founder 가 의도한 자산 비중 (60-80% equity / 10-30% treasury)
-        은 등록 단계에서 조용히 사라지고, rebalance 시 계산되는 target 도 사실상
-        6개 균등 (~16.66%) 으로 수렴합니다.
+        실제로 큰 점프가 동작했다면 자격 6개 기준이 모두 통과하면서
+        인큐베이션 → 공개 운영 전환 데모가 완결됩니다. 현재는 이 시간 점프만
+        막혀 있습니다.
       </li>
     </ul>
 
-    <h3>권장 수정</h3>
-    <p>
-      LLM 프롬프트를 제약하거나 (function-call 결과를 후처리해서)
-      <code>weightConstraints[].asset</code> 이 반드시
-      <code>targetUniverse</code> 에 존재하는 심볼이 되도록 강제해야 합니다.
-      "equity 60-80%" 같은 클래스 단위 정책이 정말 필요하면 BE 가 그것을
-      개별 심볼 entry 로 풀어서 반환하면 됩니다. 그렇지 않으면 체인 단에서는
-      실제 정책이 무의미해집니다.
-    </p>
-  </article>
-
-  <!-- ========================================================== -->
-  <!-- 이슈 6                                                       -->
-  <!-- ========================================================== -->
-  <article class="issue" id="issue-rebalance-503">
-    <header>
-      <span class="pill status-blocked">blocking</span>
-      <span class="pill sev-critical">critical</span>
-      <h2>6. <code>POST /admin/agents/{id}/rebalance</code> 가 일관되게 503 으로 실패함 — 정확한 원인 미상</h2>
-    </header>
-    <p class="summary">
-      어드민 페이지에는 에이전트의 자산을 운용 방침대로 매수/매도하도록
-      트리거하는 "Trigger rebalance" 버튼이 있고, 그 위에 같은 동작을
-      여러 번 자동 반복해서 30일치 운영 이력을 빠르게 만드는 "Demo
-      bootstrap" 카드가 있습니다. 그런데 이 버튼들을 누르면 매번 백엔드가
-      "체인에 트랜잭션을 보내려고 3번 시도했지만 실패" 라는 오류를 반환합니다.
-      외부에서 확인 가능한 환경 (가격 데이터, vault 잔액, 컨트랙트 비중 설정)
-      은 모두 정상이라서, 백엔드 내부의 트랜잭션 송신 단계에서 문제가 생기는
-      것으로 보이지만 정확한 사유는 백엔드 로그가 있어야 짚을 수 있습니다.
-      이 기능이 막혀 있어서 에이전트가 실제로 운용된 적이 없는 상태로
-      남고, 결과적으로 30일이 지나도 공개 운영 단계(PublicLaunch) 로
-      자동 승급되는 데 필요한 6개 기준 중 3개(운용 결정 횟수, 최대 손실폭,
-      샤프 비율)가 영원히 충족되지 못합니다.
-    </p>
-
-    <h3>재현</h3>
-    <pre class="shell">curl -i -X POST https://web-production-acacf1.up.railway.app/admin/agents/3/rebalance</pre>
-    <pre>HTTP/2 503
-{"detail":{
-  "error": "ChainUnreachable",
-  "message": "rebalance failed: send_tx exceeded 3 retries"
-}}</pre>
-
-    <h3>FE 가 자체적으로 확인한 사항</h3>
+    <h3>백엔드 측 요청</h3>
     <ul>
       <li>
-        Pyth 가격 — 5종 synthetic 전부 <strong>fresh</strong>
-        (<code>/admin/debug/synthetic-prices</code> 기준 sNVDA $212, sSPY $750,
-        sAAPL $311, sTSLA $440, sMSFT $413).
+        TimeProvider 의 advance 가 누적 오프셋으로 적용되는지, 한 번에 더할 수
+        있는 상한이 있는지 확인 부탁드립니다.
       </li>
       <li>
-        agent #3 의 vault — <code>995 USDC</code> cash 보유 중. rebalance 가
-        target 비중으로 매수할 자금은 충분합니다.
-      </li>
-      <li>
-        체인 측 <code>weightConstraintOf(asset)</code> — 6종 자산 모두에 대해
-        valid band (1466 – 1866 bps) 가 등록되어 있습니다. 균등 분배 target
-        (~1666 bps each) 이면 컨트랙트 제약을 깨지 않습니다.
-      </li>
-      <li>
-        이슈 #5 의 클래스명 weight 문제가 executor 의 target 계산에 영향을
-        줄 수도 있겠지만, 체인 단의 ±200bps 폴백 형태는 정상 등록되어
-        있어서 단독 원인은 아닌 것으로 보입니다.
-      </li>
-    </ul>
-
-    <h3>FE 가 확인 못한 부분</h3>
-    <ul>
-      <li>
-        체인 측 revert 사유 (있다면) — BE 의 503 래퍼가
-        <code>ChainUnreachable</code> 로 일괄 표현하기 때문에
-        <code>send_tx</code> 가 RPC 단에서 timeout 인지, gas estimation 단계의
-        revert 인지, executor wallet 의 MNT 부족인지 외부에서 구분하지 못합니다.
-      </li>
-      <li>
-        BE executor 가 weight target 을 어디에서 읽는지 — DB (클래스 단위로
-        저장된 mandate.weightConstraints) 인지, 아니면 체인의 address 단위
-        값을 다시 읽어오는지 코드 없이는 확인 불가합니다.
-      </li>
-    </ul>
-
-    <h3>프론트엔드 영향</h3>
-    <ul>
-      <li>
-        <strong><code>/admin</code> 의 Demo bootstrap 카드가 사실상 무력화</strong>
-        됩니다. 시간 advance 단계는 성공하지만 rebalance 단계가 매번 실패해서,
-        12 cycle 을 돌려도 qualify 기준 중 #1 (continuous_days) 하나만 통과하고
-        #2 (decision_count ≥ 10), #4 (max_drawdown), #6 (sharpe_computable) 은
-        영원히 0 입니다.
-      </li>
-      <li>
-        rebalance 가 안 돌면 에이전트가 BE 의 qualification 경로로
-        Incubation 을 벗어날 수 없습니다. on-chain 최소조건만으로
-        <code>advanceToPublic</code> 을 호출할 수는 있지만, 그러면
-        performance 기록이 비어 있는 상태로 PublicLaunch 가 됩니다.
-      </li>
-    </ul>
-
-    <h3>FE 가 다음으로 필요한 진단 정보</h3>
-    <ul>
-      <li>
-        실패하는 <code>send_tx</code> 시점 전후의 Railway 로그 — 실제 예외,
-        gas estimation 결과, revert 데이터 등.
-      </li>
-      <li>
-        선택적으로 503 응답 본문에 좀 더 자세한 정보를 같이 실어주면
-        반복 문의 없이 진단 가능합니다 (예:
-        <code>details: { stage: "estimateGas", reason: "MandateBreach" }</code>).
+        응답의 <code>newCurrentTime</code> 이 실제 on-chain
+        <code>currentTime()</code> 과 일치하도록 맞춰주시면 프론트엔드가
+        가속 결과를 신뢰하고 표시할 수 있습니다.
       </li>
     </ul>
   </article>
 
   <footer class="page">
-    생성: 2026-05-28 · 관리: <code>helmfinance/frontend</code> 와 동기화
+    생성: 2026-05-28 · 갱신: 2026-05-29 · 관리: <code>helmfinance/frontend</code> 와 동기화
   </footer>
 
 </div>

@@ -2,33 +2,37 @@
   "chain": {
     "name": "Mantle Sepolia",
     "id": 5003,
-    "nativeCurrency": { "name": "MNT", "symbol": "MNT", "decimals": 18 },
+    "nativeCurrency": {
+      "name": "MNT",
+      "symbol": "MNT",
+      "decimals": 18
+    },
     "rpcUrl": "https://rpc.sepolia.mantle.xyz",
-    "explorerUrl": "https://explorer.sepolia.mantle.xyz",
+    "explorerUrl": "https://sepolia.mantlescan.xyz",
     "faucetUrl": "https://faucet.sepolia.mantle.xyz"
   },
   "contracts": {
-    "registry":         "0x9add2f9f68BF6c9F2FD793e28eB5ffC89c324Cd5",
-    "agentNFT":         "0x82CA41A9DB4974a0cF54Ad9ebcB5aad081fED8B8",
-    "distributor":      "0x71B9d08cbc8327C5EBe6809dA06f7BFE52479D87",
-    "redemptionQueue":  "0xAD958390FD07498408c129F22aFfdcFfb6B519d4",
-    "treasury":         "0x07e4daA80a86C7a8Ee3172b93E413C952221295D",
-    "harvester":        "0xa5f4587D5D4D92cE6e721a4ccD4037981128A153",
-    "pythAdapter":      "0x51E53801ec5D1fcE53780b5C69492176F72cc54e",
-    "timeProvider":     "0x908E9154138D958ED095b87e548738d1C5E75a00",
-    "mEthAdapter":      "0x78B4bA3342Eb4b1aD74ba534E26cDD12006c6e43",
-    "usdyAdapter":      "0x35D73601662a614cBD7fa1503935A65D89f2E201",
-    "usdc":             "0x903c727Dd011bD8A3a1ce522fe26Bc071EE07Bfe",
-    "agentTokenImpl":   "0x22efE697dE33080F237a07E6b86735830Aebe15A",
-    "agentVaultImpl":   "0x9eE284115f8bd5134c5ba5eD208518165a0EbE33",
-    "founderVaultImpl": "0x1336e5cFDA3cd5710de0E7Cc5e3da762777951e6"
+    "registry": "0x120CADfafF8e59DE9f6Ec519676DB1b7358c6999",
+    "agentNFT": "0x24665D5b840D3FAEd14a44Ae4563d04F773992aA",
+    "distributor": "0x8303c90242799A7790518F16560AEc3677AcBd6c",
+    "redemptionQueue": "0x35c0Dc7EA3bF3815Fecc81e2D395844f56Ba1326",
+    "treasury": "0x2c7D0131951a6812F8bC9bfd63481d198a687f39",
+    "harvester": "0x9b314e09b7d6c0c2d21BBda4c954d846367b7985",
+    "pythAdapter": "0x20c1d8d0baF36bC09D3142E8DF144CD1db4aedc2",
+    "timeProvider": "0xce2aE0a34019895A2e7E00D153553108148a8F26",
+    "mEthAdapter": "0xe553f587e82434d427079FB5Fe7554677FBf9A5e",
+    "usdyAdapter": "0xeC98D0394E3b950Cc1f65898c5DcD1952b36571a",
+    "usdc": "0xd5a92Cf8b835DCCA27D6E7b3018197EC46b787bc",
+    "agentTokenImpl": "0x81121A3DD57A60De508f57EB5227f60E8bf39941",
+    "agentVaultImpl": "0x97D048e620433EA5454Ab8d822bd5B59359310BB",
+    "founderVaultImpl": "0xB700059c0275867C3c302Fd9582667Ac7230DA9f"
   },
   "syntheticAssets": {
-    "sNVDA": "0x985CfD4339DeFf8f0Bf3712008E4Cd143ddfFD09",
-    "sSPY":  "0x57a4DE159C392e4222F2c84ebb7470d6615Aa8cE",
-    "sAAPL": "0xaEc5975ecB0F879aEB58833Accb8078C4697e930",
-    "sTSLA": "0x32Da445504A2FBE0123320730F9823Cb0f960e6E",
-    "sMSFT": "0x7B2261D64b96b0fC633420B3567D12996FEF5238"
+    "sNVDA": "0xa3beDd976ee67b88dbF2F83AEDF768b9FFEd95aC",
+    "sSPY": "0x2B2694DDe7468A9f7bd65Ff6e02a01BDbDd81FD5",
+    "sAAPL": "0xa56294bAaaDFa5D5B1B0FF30877855853a5617D0",
+    "sTSLA": "0x1C00ce60fb99EFFB47c44f5503064Ef5B5E1aeeF",
+    "sMSFT": "0xA15126c0B17a3aD456c036298183a225e16FFC2f"
   },
   "externalContracts": {
     "pyth": "0x98046Bd286715D3B0BC227Dd7a956b83D8978603"
