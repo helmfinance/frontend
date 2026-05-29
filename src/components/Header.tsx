@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useChainId } from "wagmi";
@@ -181,10 +182,14 @@ function MobileDrawer({
 
 function HelmMark() {
   return (
-    <span className="relative inline-block h-[22px] w-[22px] flex-shrink-0 rounded-full bg-ink">
-      <span className="absolute left-1/2 top-1/2 h-[12px] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-canvas-light" />
-      <span className="absolute left-1/2 top-1/2 h-[2px] w-[12px] -translate-x-1/2 -translate-y-1/2 bg-canvas-light" />
-    </span>
+    <Image
+      src="/helm-logo.svg"
+      alt="Helm"
+      width={26}
+      height={26}
+      priority
+      className="h-[26px] w-[26px] flex-shrink-0"
+    />
   );
 }
 
