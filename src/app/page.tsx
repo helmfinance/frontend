@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { AgentCard } from "@/components/AgentCard";
-import { EmptyState, Tag } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type { components } from "@/lib/api-types.gen";
 
@@ -155,11 +155,6 @@ function MarketplaceContent() {
       <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         {/* Hero */}
         <section className="py-14 sm:py-20">
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <Tag variant="mint">AI × RWA × Agentic Wallets</Tag>
-            <span className="spec-eyebrow">Mantle Turing Test 2026</span>
-          </div>
-
           <h1 className="font-display text-[44px] sm:text-[70px] font-light leading-none tracking-[-0.01em] text-ink max-w-[14ch]">
             Tokenized ETFs
             <br />
