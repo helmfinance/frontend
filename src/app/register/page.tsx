@@ -38,6 +38,7 @@ import {
 import addresses from "@/lib/addresses.json";
 import { decodeContractError } from "@/lib/decodeError";
 import { waitForTx } from "@/lib/waitForTx";
+import { writeWithNonce } from "@/lib/tx";
 import { formatBps, formatUsdc } from "@/lib/format";
 import { Button, Stepper, StepRow } from "@/components/ui";
 import type { StepStatus } from "@/components/ui";
@@ -330,12 +331,15 @@ export default function RegisterPage() {
         setSteps((s) => ({ ...s, approve: { status: "skipped" } }));
       } else {
         setSteps((s) => ({ ...s, approve: { status: "spinning" } }));
-        const hash = await writeContractAsync({
-          address: CONTRACTS.usdc as `0x${string}`,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [CONTRACTS.registry as `0x${string}`, seedUsdc],
-        });
+        const hash = await writeWithNonce(publicClient!, walletAddress!, (nonce) =>
+          writeContractAsync({
+            address: CONTRACTS.usdc as `0x${string}`,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [CONTRACTS.registry as `0x${string}`, seedUsdc],
+            nonce,
+          }),
+        );
         setSteps((s) => ({
           ...s,
           approve: { status: "spinning", txHash: hash },
@@ -363,18 +367,21 @@ export default function RegisterPage() {
       const mandateHash = editedHash.startsWith("0x")
         ? (editedHash as `0x${string}`)
         : (`0x${editedHash}` as `0x${string}`);
-      const hash = await writeContractAsync({
-        address: CONTRACTS.registry as `0x${string}`,
-        abi: REGISTRY_ABI,
-        functionName: "registerAgent",
-        args: [
-          mandateHash,
-          parsed.mandateUri,
-          seedUsdc,
-          assets,
-          weightConstraints,
-        ],
-      });
+      const hash = await writeWithNonce(publicClient!, walletAddress!, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.registry as `0x${string}`,
+          abi: REGISTRY_ABI,
+          functionName: "registerAgent",
+          args: [
+            mandateHash,
+            parsed.mandateUri,
+            seedUsdc,
+            assets,
+            weightConstraints,
+          ],
+          nonce,
+        }),
+      );
       setSteps((s) => ({
         ...s,
         register: { status: "spinning", txHash: hash },

@@ -29,6 +29,7 @@ import { CONTRACTS, mantleSepolia } from "@/lib/wagmi";
 import { USDC_DECIMALS } from "@/lib/contracts-constants";
 import { decodeContractError } from "@/lib/decodeError";
 import { waitForTx } from "@/lib/waitForTx";
+import { writeWithNonce } from "@/lib/tx";
 import { Button, Modal } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -507,13 +508,14 @@ function SlashAgentButton({
   const [busy, setBusy] = useState(false);
   const chainId = useChainId();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { push: toast } = useToast();
   const onCorrectChain = chainId === mantleSepolia.id;
   const confirmPhrase = "slash";
 
   async function run() {
-    if (!agentId || !publicClient || !onCorrectChain) return;
+    if (!agentId || !publicClient || !onCorrectChain || !address) return;
     if (!reason.trim()) {
       toast({ msg: "Provide a slash reason", variant: "error" });
       return;
@@ -524,12 +526,15 @@ function SlashAgentButton({
     }
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: CONTRACTS.registry as `0x${string}`,
-        abi: REGISTRY_SLASH_ABI,
-        functionName: "slash",
-        args: [BigInt(agentId), reason.trim()],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.registry as `0x${string}`,
+          abi: REGISTRY_SLASH_ABI,
+          functionName: "slash",
+          args: [BigInt(agentId), reason.trim()],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({ msg: `Agent #${agentId} slashed`, tx: hash });
       setOpen(false);

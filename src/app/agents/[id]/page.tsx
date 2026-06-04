@@ -14,6 +14,7 @@ import { parseAbi } from "viem";
 import { mantleSepolia } from "@/lib/wagmi";
 import { decodeContractError } from "@/lib/decodeError";
 import { waitForTx } from "@/lib/waitForTx";
+import { writeWithNonce } from "@/lib/tx";
 import { useToast } from "@/lib/toast";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -843,21 +844,25 @@ function WindDownCrankButton({
 }) {
   const chainId = useChainId();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { push: toast } = useToast();
   const [busy, setBusy] = useState(false);
   const onCorrectChain = chainId === mantleSepolia.id;
 
   async function run() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: vaultAddress,
-        abi: VAULT_WINDDOWN_ABI,
-        functionName,
-        args: [],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: vaultAddress,
+          abi: VAULT_WINDDOWN_ABI,
+          functionName,
+          args: [],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({
         msg:

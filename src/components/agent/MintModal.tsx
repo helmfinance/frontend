@@ -20,6 +20,7 @@ import { AGT_DECIMALS, USDC_DECIMALS } from "@/lib/contracts-constants";
 import { useDebounce } from "@/lib/hooks";
 import { decodeContractError } from "@/lib/decodeError";
 import { waitForTx } from "@/lib/waitForTx";
+import { writeWithNonce } from "@/lib/tx";
 import { formatUsdc } from "@/lib/format";
 import { Button, Modal, Stepper, StepRow } from "@/components/ui";
 import type { StepStatus } from "@/components/ui";
@@ -190,12 +191,15 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         return true;
       }
       setSteps((s) => ({ ...s, approve: { status: "spinning" } }));
-      const hash = await writeContractAsync({
-        address: CONTRACTS.usdc as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [vaultAddress, amountUsdc!],
-      });
+      const hash = await writeWithNonce(publicClient!, address!, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.usdc as `0x${string}`,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [vaultAddress, amountUsdc!],
+          nonce,
+        }),
+      );
       setSteps((s) => ({
         ...s,
         approve: { status: "spinning", txHash: hash },
@@ -272,13 +276,16 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         setSteps((s) => ({ ...s, pyth: { status: "skipped" } }));
         return true;
       }
-      const hash = await writeContractAsync({
-        address: CONTRACTS.pythAdapter as `0x${string}`,
-        abi: PYTH_ABI,
-        functionName: "updatePriceFeeds",
-        args: [pyth.updateData as `0x${string}`[]],
-        value: BigInt(pyth.feeMntWei),
-      });
+      const hash = await writeWithNonce(publicClient!, address!, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.pythAdapter as `0x${string}`,
+          abi: PYTH_ABI,
+          functionName: "updatePriceFeeds",
+          args: [pyth.updateData as `0x${string}`[]],
+          value: BigInt(pyth.feeMntWei),
+          nonce,
+        }),
+      );
       setSteps((s) => ({
         ...s,
         pyth: { status: "spinning", txHash: hash },
@@ -340,12 +347,15 @@ export function MintModal({ agent, open, onClose }: MintModalProps) {
         return;
       }
       setSteps((s) => ({ ...s, deposit: { status: "spinning" } }));
-      const hash = await writeContractAsync({
-        address: vaultAddress,
-        abi: VAULT_ABI,
-        functionName: "deposit",
-        args: [amountUsdc, address],
-      });
+      const hash = await writeWithNonce(publicClient!, address!, (nonce) =>
+        writeContractAsync({
+          address: vaultAddress,
+          abi: VAULT_ABI,
+          functionName: "deposit",
+          args: [amountUsdc, address],
+          nonce,
+        }),
+      );
       setSteps((s) => ({
         ...s,
         deposit: { status: "spinning", txHash: hash },

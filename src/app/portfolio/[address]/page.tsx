@@ -36,6 +36,7 @@ import { api, ApiError } from "@/lib/api";
 import { CONTRACTS, mantleSepolia } from "@/lib/wagmi";
 import { decodeContractError } from "@/lib/decodeError";
 import { waitForTx } from "@/lib/waitForTx";
+import { writeWithNonce } from "@/lib/tx";
 import {
   formatAddress,
   formatRelative,
@@ -672,21 +673,25 @@ function DividendClaimButton({
 }) {
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { push: toast } = useToast();
   const [busy, setBusy] = useState(false);
   const onCorrectChain = useOnCorrectChain();
 
   async function onClaim() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     setBusy(true);
     try {
       const epochs = d.claimableEpochs.map((e) => BigInt(e));
-      const hash = await writeContractAsync({
-        address: CONTRACTS.distributor as `0x${string}`,
-        abi: DISTRIBUTOR_ABI,
-        functionName: "claim",
-        args: [BigInt(d.agentId), epochs],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.distributor as `0x${string}`,
+          abi: DISTRIBUTOR_ABI,
+          functionName: "claim",
+          args: [BigInt(d.agentId), epochs],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({
         msg: `Claimed ${formatUsdc(d.claimableAmountUsdc, {
@@ -725,23 +730,27 @@ function ClaimAllDividendsButton({
 }) {
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { push: toast } = useToast();
   const [busy, setBusy] = useState(false);
   const onCorrectChain = useOnCorrectChain();
 
   async function onClaimAll() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     setBusy(true);
     try {
       let lastHash: `0x${string}` | null = null;
       for (const d of dividends) {
         const epochs = d.claimableEpochs.map((e) => BigInt(e));
-        const hash = await writeContractAsync({
-          address: CONTRACTS.distributor as `0x${string}`,
-          abi: DISTRIBUTOR_ABI,
-          functionName: "claim",
-          args: [BigInt(d.agentId), epochs],
-        });
+        const hash = await writeWithNonce(publicClient, address, (nonce) =>
+          writeContractAsync({
+            address: CONTRACTS.distributor as `0x${string}`,
+            abi: DISTRIBUTOR_ABI,
+            functionName: "claim",
+            args: [BigInt(d.agentId), epochs],
+            nonce,
+          }),
+        );
         lastHash = hash;
         await waitForTx(publicClient!, hash);
       }
@@ -929,21 +938,25 @@ function RedemptionCancelButton({
 }) {
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { push: toast } = useToast();
   const [busy, setBusy] = useState(false);
   const onCorrectChain = useOnCorrectChain();
 
   async function onCancel() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     if (!confirm(`Cancel redemption request #${requestId}?`)) return;
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: CONTRACTS.redemptionQueue as `0x${string}`,
-        abi: QUEUE_ABI,
-        functionName: "cancel",
-        args: [BigInt(requestId)],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.redemptionQueue as `0x${string}`,
+          abi: QUEUE_ABI,
+          functionName: "cancel",
+          args: [BigInt(requestId)],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({ msg: `Redemption #${requestId} cancelled`, tx: hash });
       onChange();
@@ -979,20 +992,24 @@ function RedemptionClaimButton({
 }) {
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { push: toast } = useToast();
   const [busy, setBusy] = useState(false);
   const onCorrectChain = useOnCorrectChain();
 
   async function onClaim() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: CONTRACTS.redemptionQueue as `0x${string}`,
-        abi: QUEUE_ABI,
-        functionName: "claim",
-        args: [BigInt(requestId)],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.redemptionQueue as `0x${string}`,
+          abi: QUEUE_ABI,
+          functionName: "claim",
+          args: [BigInt(requestId)],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({ msg: `Redemption #${requestId} claimed`, tx: hash });
       onChange();
@@ -1310,7 +1327,7 @@ function FounderShareModal({
   }
 
   async function run() {
-    if (!amount || !publicClient || !onCorrectChain) return;
+    if (!amount || !publicClient || !onCorrectChain || !address) return;
     setBusy(true);
     try {
       if (mode === "deposit") {
@@ -1321,32 +1338,41 @@ function FounderShareModal({
         }
         // 1. approve if needed
         if ((agtAllowance ?? 0n) < amount) {
-          const approveHash = await writeContractAsync({
-            address: agentTokenAddress,
-            abi: erc20Abi,
-            functionName: "approve",
-            args: [fv.founderVaultAddress as `0x${string}`, amount],
-          });
+          const approveHash = await writeWithNonce(publicClient, address, (nonce) =>
+            writeContractAsync({
+              address: agentTokenAddress,
+              abi: erc20Abi,
+              functionName: "approve",
+              args: [fv.founderVaultAddress as `0x${string}`, amount],
+              nonce,
+            }),
+          );
           await waitForTx(publicClient, approveHash);
           refetchAllowance();
         }
         // 2. deposit
-        const hash = await writeContractAsync({
-          address: fv.founderVaultAddress as `0x${string}`,
-          abi: FOUNDER_VAULT_ABI,
-          functionName: "depositFounderShares",
-          args: [amount],
-        });
+        const hash = await writeWithNonce(publicClient, address, (nonce) =>
+          writeContractAsync({
+            address: fv.founderVaultAddress as `0x${string}`,
+            abi: FOUNDER_VAULT_ABI,
+            functionName: "depositFounderShares",
+            args: [amount],
+            nonce,
+          }),
+        );
         await waitForTx(publicClient!, hash);
         toast({ msg: `Deposited ${input.trim()} shares to FounderVault`, tx: hash });
       } else {
         // withdraw
-        const hash = await writeContractAsync({
-          address: fv.founderVaultAddress as `0x${string}`,
-          abi: FOUNDER_VAULT_ABI,
-          functionName: "withdraw",
-          args: [amount],
-        });
+        const hash = await writeWithNonce(publicClient, address, (nonce) =>
+          writeContractAsync({
+            address: fv.founderVaultAddress as `0x${string}`,
+            abi: FOUNDER_VAULT_ABI,
+            functionName: "withdraw",
+            args: [amount],
+            nonce,
+          }),
+        );
         await waitForTx(publicClient!, hash);
         toast({ msg: `Withdrew ${input.trim()} shares`, tx: hash });
       }
@@ -1522,13 +1548,14 @@ function FounderTriggerWindDownButton({
   const [busy, setBusy] = useState(false);
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { push: toast } = useToast();
   const onCorrectChain = useOnCorrectChain();
 
   const confirmPhrase = "wind down";
 
   async function run() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     if (!reason.trim()) {
       toast({ msg: "Provide a reason", variant: "error" });
       return;
@@ -1539,12 +1566,15 @@ function FounderTriggerWindDownButton({
     }
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: vaultAddress as `0x${string}`,
-        abi: FOUNDER_VAULT_ABI,
-        functionName: "triggerWindDown",
-        args: [reason.trim()],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: vaultAddress as `0x${string}`,
+          abi: FOUNDER_VAULT_ABI,
+          functionName: "triggerWindDown",
+          args: [reason.trim()],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({ msg: `${agentName} wind-down triggered`, tx: hash });
       onChange();
@@ -1654,20 +1684,24 @@ function FounderClaimCarryButton({
 }) {
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
+  const { address } = useAccount();
   const { push: toast } = useToast();
   const [busy, setBusy] = useState(false);
   const onCorrectChain = useOnCorrectChain();
 
   async function onClaim() {
-    if (!publicClient || !onCorrectChain) return;
+    if (!publicClient || !onCorrectChain || !address) return;
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: vaultAddress as `0x${string}`,
-        abi: FOUNDER_VAULT_ABI,
-        functionName: "claimCarry",
-        args: [],
-      });
+      const hash = await writeWithNonce(publicClient, address, (nonce) =>
+        writeContractAsync({
+          address: vaultAddress as `0x${string}`,
+          abi: FOUNDER_VAULT_ABI,
+          functionName: "claimCarry",
+          args: [],
+          nonce,
+        }),
+      );
       await waitForTx(publicClient!, hash);
       toast({ msg: "Carry claimed", tx: hash });
       onChange();

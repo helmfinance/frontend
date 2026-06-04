@@ -27,6 +27,7 @@ import {
 } from "@/lib/contracts-constants";
 import { decodeContractError } from "@/lib/decodeError";
 import { waitForTx } from "@/lib/waitForTx";
+import { writeWithNonce } from "@/lib/tx";
 import { formatDate, formatRelative, formatUsdc } from "@/lib/format";
 import { Button, Modal, Stepper, StepRow } from "@/components/ui";
 import type { StepStatus } from "@/components/ui";
@@ -176,12 +177,15 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
         setSteps((s) => ({ ...s, approve: { status: "skipped" } }));
       } else {
         setSteps((s) => ({ ...s, approve: { status: "spinning" } }));
-        const hash = await writeContractAsync({
-          address: tokenAddress,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [CONTRACTS.redemptionQueue as `0x${string}`, sharesAmount],
-        });
+        const hash = await writeWithNonce(publicClient!, address!, (nonce) =>
+          writeContractAsync({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [CONTRACTS.redemptionQueue as `0x${string}`, sharesAmount],
+            nonce,
+          }),
+        );
         setSteps((s) => ({
           ...s,
           approve: { status: "spinning", txHash: hash },
@@ -206,12 +210,15 @@ export function RedeemModal({ agent, open, onClose }: RedeemModalProps) {
     /* Step 2: requestRedeem */
     try {
       setSteps((s) => ({ ...s, request: { status: "spinning" } }));
-      const hash = await writeContractAsync({
-        address: CONTRACTS.redemptionQueue as `0x${string}`,
-        abi: QUEUE_ABI,
-        functionName: "requestRedeem",
-        args: [BigInt(agent.agentId), sharesAmount, tier.enum],
-      });
+      const hash = await writeWithNonce(publicClient!, address!, (nonce) =>
+        writeContractAsync({
+          address: CONTRACTS.redemptionQueue as `0x${string}`,
+          abi: QUEUE_ABI,
+          functionName: "requestRedeem",
+          args: [BigInt(agent.agentId), sharesAmount, tier.enum],
+          nonce,
+        }),
+      );
       setSteps((s) => ({
         ...s,
         request: { status: "spinning", txHash: hash },

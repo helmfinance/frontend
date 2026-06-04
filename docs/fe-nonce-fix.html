@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Helm FE — Wallet Nonce 충돌 픽스</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 880px; margin: 40px auto; padding: 0 24px; line-height: 1.65; color: #222; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+  h2 { margin-top: 36px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  h3 { margin-top: 24px; }
+  code { background: #f3f3f3; padding: 2px 6px; border-radius: 4px; font-size: 0.92em; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px 18px; border-radius: 6px; overflow-x: auto; font-size: 0.85em; line-height: 1.55; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .box { background: #f8f9fc; border-left: 4px solid #4a6bff; padding: 12px 16px; margin: 16px 0; }
+  .warn { background: #fff7e6; border-left: 4px solid #f5a623; padding: 12px 16px; margin: 16px 0; font-size: 0.95em; }
+  .err { background: #fdecec; border-left: 4px solid #d9534f; padding: 12px 16px; margin: 16px 0; font-family: ui-monospace, Menlo, monospace; font-size: 0.88em; }
+  .check { background: #ecfdf3; border-left: 4px solid #12b76a; padding: 12px 16px; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #f3f3f3; }
+  ul, ol { padding-left: 22px; }
+  .tag { display: inline-block; background: #e8e8e8; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<h1>helmfi FE — Wallet Nonce 충돌 픽스 가이드</h1>
+
+<p>
+  <span class="tag">우선순위: 높음</span>
+  <span class="tag">변경 범위: 작음 (헬퍼 1개 + 호출 위치 교체)</span>
+  <span class="tag">예상 작업: 30-60분</span>
+</p>
+
+<div class="check">
+<b>✅ FE 반영 완료 — 2026-06-04</b>
+<ul>
+  <li>헬퍼 <code>src/lib/tx.ts</code> 신규 작성 (<code>writeWithNonce</code> + <code>isNonceError</code>).</li>
+  <li><b>user-wallet write 18곳 전부</b> 교체 (6개 파일). 문서 §5 추정(register + portfolio)보다 넓음 — mint은 실제로 <code>MintModal.tsx</code>, redeem은 <code>RedeemModal.tsx</code>, 여기에 admin <code>slash</code> · 상세페이지 wind-down crank 까지 포함. distribute(4-tx)는 BE executor라 미해당(문서와 일치).</li>
+  <li><b>검증</b>: <code>tsc --noEmit</code> exit 0 · <code>pnpm build</code>(Node 20) exit 0 · 신규 <code>tx.ts</code> eslint 0건. (기존 코드의 react-hooks 경고는 이 변경과 무관.)</li>
+  <li><b>구현 차이</b>: 문서 §4-1의 <code>any</code> 4-인자 시그니처 대신 <b>타입세이프 thunk 형태</b>를 채택. 동작(명시 nonce + 1회 재시도)은 동일하고, 코드베이스 no-<code>any</code> 컨벤션을 유지. 실제 반영본은 아래 §4-1 · §4-2에 추가.</li>
+  <li><b>남은 것</b>: 실지갑 연속 플로우 수동 검증(dev 서버 + MetaMask 필요) · 커밋/배포.</li>
+</ul>
+</div>
+
+<h2>1. 증상</h2>
+
+<p>사용자가 다음 흐름 중 두 번째 step 이후에 다음 에러로 막힘:</p>
+<ul>
+  <li>Launch agent — Step 2 (registerAgent)</li>
+  <li>Mint shares — Step 1 (approve) / Step 2 (Pyth update) / Step 3 (deposit)</li>
+  <li>Redeem 흐름의 두 번째 step 이후</li>
+</ul>
+
+<div class="err">
+The contract function "approve" reverted with the following reason: <br>
+RPC submit: failed to forward tx to sequencer, err: 'nonce too low: next nonce 3115, tx nonce 3114'
+</div>
+
+<div class="err">
+The contract function "registerAgent" reverted with the following reason: <br>
+RPC submit: failed to forward tx to sequencer, err: 'replacement transaction underpriced'
+</div>
+
+<p>두 에러는 같은 뿌리. 현재는 사용자가 매 발생 시 Metamask 활동 데이터 삭제 + self-transfer 같은 워밍업 tx로 회피 중. 데모 본방 안정성을 위해 영구 해결 필요.</p>
+
+<h2>2. 발생 빈도</h2>
+
+<p>이 세션의 실제 데이터:</p>
+<table>
+  <tr><th>흐름</th><th>발생 빈도</th><th>회피 비용</th></tr>
+  <tr><td>Register agent (2-tx 흐름)</td><td>거의 매번 (70-90%)</td><td>self-transfer + 페이지 새로고침 (~30s)</td></tr>
+  <tr><td>Mint shares (3-tx 흐름)</td><td>거의 매번 (80%+)</td><td>같음</td></tr>
+  <tr><td>Distribute (4-tx 흐름, BE 트리거)</td><td>0회 (BE executor 사용, 영향 없음)</td><td>—</td></tr>
+</table>
+<p>특히 같은 wallet으로 빠르게 여러 register/mint를 시도할 때 거의 100%. 데모 시연 도중 무수히 발생할 것으로 예상.</p>
+
+<h2>3. 원인 분석</h2>
+
+<h3>BE 또는 컨트랙 문제가 <b>아님</b></h3>
+
+<ul>
+  <li>BE는 user wallet으로 tx를 발사하지 않음 (admin 흐름은 BE executor wallet 별도 사용). 따라서 user wallet의 nonce에 영향을 못 줌.</li>
+  <li>스마트 컨트랙은 caller의 nonce만 +1 시킴. 다른 EOA의 nonce 못 만짐.</li>
+  <li>FE 코드 자체도 동시 tx 안 보냄. <code>waitForTransactionReceipt</code> 로 receipt까지 await 후 다음 step 진행.</li>
+</ul>
+
+<h3>진짜 원인 — Metamask의 nonce 캐시 정책 + L2 testnet RPC 동기화 lag</h3>
+
+<p>Metamask는 매 tx마다 chain RPC에서 nonce를 조회하지 않고 <b>내부 캐시</b>에 의존:</p>
+<ol>
+  <li>tx 발사 시 → 캐시된 nonce 사용</li>
+  <li>발사 직후 캐시 +1 (낙관적 업데이트)</li>
+  <li>RPC에서 확인된 결과로 보정 (이상적으로는)</li>
+</ol>
+
+<p>이 보정 단계가 Mantle Sepolia 같은 신생 L2 환경에서 자주 실패:</p>
+<ul>
+  <li>tx 가 sequencer에 도달했지만 confirm 까지 RPC 응답 lag 있음 → Metamask는 미확정 상태로 캐시 유지</li>
+  <li>이전 흐름에서 실패한 tx (PriceStale, 사용자 reject 등) 의 결과가 RPC에 늦게 반영 → 캐시가 chain 실상태보다 앞서거나 뒤처짐</li>
+  <li>여러 wallet을 한 세션에서 빠르게 전환 → 각 wallet의 캐시 동기화 누락</li>
+</ul>
+
+<p>결과:</p>
+<ul>
+  <li><b>"nonce too low"</b>: wallet 캐시가 chain보다 작음 (실제 처리된 tx 인지 못 함)</li>
+  <li><b>"replacement underpriced"</b>: wallet이 이미 mempool에 있는 tx 와 같은 nonce + 동일/낮은 gas로 재발사 시도</li>
+</ul>
+
+<div class="warn">
+이 캐시 정책은 Metamask 내부 closed-source 코드라 외부에서 수정 불가. <b>우리가 컨트롤할 수 있는 유일한 레이어는 FE 코드</b> — 거기서 Metamask 캐시를 무시하고 chain RPC에 직접 nonce를 묻는 방식으로 우회.
+</div>
+
+<h3>왜 self-transfer 가 해결책처럼 보였나</h3>
+
+<p>self-transfer (단순 EOA → EOA 송금)는 Metamask가 가장 안정적으로 추적하는 tx 형태. confirm 즉시 wallet이 "내 nonce는 이제 X+1" 로 강제 재인지. 이후 흐름이 정상화. 하지만 사용자가 매 nonce 에러마다 이걸 수동으로 해야 하는 건 데모 시연에 부적합.</p>
+
+<h2>4. 해결 방법 — 명시적 nonce + 자동 retry</h2>
+
+<p>두 단계를 묶어서 사실상 100% 통과:</p>
+
+<ol>
+  <li>매 <code>writeContractAsync</code> 직전에 <code>publicClient.getTransactionCount({blockTag: "pending"})</code> 로 chain RPC에서 직접 nonce fetch → Metamask 캐시 우회</li>
+  <li>nonce 관련 에러 발생 시 (race 등 드문 케이스) fresh nonce 재조회 후 1회 자동 retry</li>
+</ol>
+
+<h3>4-1. 헬퍼 함수 추가</h3>
+
+<p>두 패턴을 묶어주는 헬퍼를 <code>src/lib/tx.ts</code> 같은 새 파일에 한 번만 정의:</p>
+
+<pre><code>// src/lib/tx.ts
+import type { PublicClient } from "viem";
+
+const isNonceError = (e: unknown): boolean =&gt; {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    msg.includes("nonce too low") ||
+    msg.includes("replacement transaction underpriced") ||
+    msg.includes("already known")
+  );
+};
+
+/**
+ * writeContract wrapper that bypasses Metamask's stale nonce cache and
+ * auto-retries once on nonce-class errors. See docs/fe-nonce-fix.html for
+ * background.
+ */
+export async function writeWithNonce(
+  publicClient: PublicClient,
+  writeContractAsync: any, // wagmi's WriteContractMutateAsync
+  userAddress: `0x${string}`,
+  args: any,
+): Promise&lt;`0x${string}`&gt; {
+  const submit = async () =&gt; {
+    const nonce = await publicClient.getTransactionCount({
+      address: userAddress,
+      blockTag: "pending",
+    });
+    return writeContractAsync({ ...args, nonce });
+  };
+
+  try {
+    return await submit();
+  } catch (e) {
+    if (!isNonceError(e)) throw e;
+    // small backoff so sequencer/RPC views can reconcile
+    await new Promise((r) =&gt; setTimeout(r, 800));
+    return await submit();
+  }
+}
+</code></pre>
+
+<div class="check">
+<b>실제 반영본 (<code>src/lib/tx.ts</code>)</b> — wagmi의 제네릭 <code>writeContractAsync</code> 타입과 충돌을 피하려고 <code>any</code> 대신 <code>submit(nonce)</code> 콜백(thunk)을 받는 형태로 구현. 동작은 위 가이드와 동일(pending nonce 명시 + nonce류 에러 1회 재시도). 에러 판정은 viem의 <code>cause</code> 체인까지 훑음.
+</div>
+<pre><code>// src/lib/tx.ts  (실제 반영본)
+import type { PublicClient } from "viem";
+
+function errorText(err: unknown): string {
+  let text = "";
+  let cur: unknown = err;
+  for (let depth = 0; cur instanceof Error &amp;&amp; depth &lt; 6; depth++) {
+    text += ` ${cur.message}`;
+    const v = cur as { details?: unknown; shortMessage?: unknown; cause?: unknown };
+    if (typeof v.details === "string") text += ` ${v.details}`;
+    if (typeof v.shortMessage === "string") text += ` ${v.shortMessage}`;
+    cur = v.cause;
+  }
+  if (!(err instanceof Error)) text += ` ${String(err)}`;
+  return text.toLowerCase();
+}
+
+export function isNonceError(err: unknown): boolean {
+  const msg = errorText(err);
+  return (
+    msg.includes("nonce too low") ||
+    msg.includes("nonce has already been used") ||
+    msg.includes("replacement transaction underpriced") ||
+    msg.includes("already known")
+  );
+}
+
+export async function writeWithNonce(
+  publicClient: PublicClient,
+  userAddress: `0x${string}`,
+  submit: (nonce: number) =&gt; Promise&lt;`0x${string}`&gt;,
+): Promise&lt;`0x${string}`&gt; {
+  const run = async () =&gt; {
+    const nonce = await publicClient.getTransactionCount({
+      address: userAddress,
+      blockTag: "pending",
+    });
+    return submit(nonce);
+  };
+  try {
+    return await run();
+  } catch (err) {
+    if (!isNonceError(err)) throw err;
+    // 시퀀서/RPC 뷰가 정합될 시간을 준 뒤 fresh nonce로 1회 재시도
+    await new Promise((resolve) =&gt; setTimeout(resolve, 800));
+    return run();
+  }
+}
+</code></pre>
+
+<h3>4-2. 호출 위치 교체</h3>
+
+<p>모든 <code>writeContractAsync({...})</code> 호출을 <code>writeWithNonce(publicClient, writeContractAsync, userAddress, {...})</code> 로 교체.</p>
+
+<p><b>변경 전 (register/page.tsx Step 1 approve, 라인 ~331):</b></p>
+<pre><code>const hash = await writeContractAsync({
+  address: CONTRACTS.usdc as `0x${string}`,
+  abi: erc20Abi,
+  functionName: "approve",
+  args: [CONTRACTS.registry as `0x${string}`, seedUsdc],
+});
+</code></pre>
+
+<p><b>변경 후:</b></p>
+<pre><code>const hash = await writeWithNonce(publicClient, writeContractAsync, userAddress, {
+  address: CONTRACTS.usdc as `0x${string}`,
+  abi: erc20Abi,
+  functionName: "approve",
+  args: [CONTRACTS.registry as `0x${string}`, seedUsdc],
+});
+</code></pre>
+
+<div class="check">
+<b>실제 반영된 호출 형태 (thunk)</b> — <code>nonce</code>를 args 객체에 직접 넣어 <code>writeContractAsync</code>를 호출(viem/wagmi 타입 그대로 보존):
+</div>
+<pre><code>const hash = await writeWithNonce(publicClient, userAddress, (nonce) =&gt;
+  writeContractAsync({
+    address: CONTRACTS.usdc as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [CONTRACTS.registry as `0x${string}`, seedUsdc],
+    nonce,
+  }),
+);
+</code></pre>
+
+<h3>4-3. userAddress 확보</h3>
+
+<p>이미 wagmi의 <code>useAccount</code> import가 있다면 그대로:</p>
+<pre><code>import { useAccount } from "wagmi";
+
+const { address: userAddress } = useAccount();
+// 호출 전에 가드: if (!userAddress) return;
+</code></pre>
+
+<h2>5. 변경 대상 파일</h2>
+
+<p><b>실제 반영 결과</b> (grep으로 전 위치 실측):</p>
+<table>
+  <tr><th>파일</th><th>교체 수</th><th>비고</th></tr>
+  <tr><td><code>src/lib/tx.ts</code></td><td>신규</td><td>헬퍼 (<code>writeWithNonce</code>, <code>isNonceError</code>)</td></tr>
+  <tr><td><code>src/app/register/page.tsx</code></td><td>2</td><td>approve, registerAgent</td></tr>
+  <tr><td><code>src/components/agent/MintModal.tsx</code></td><td>3</td><td>approve, Pyth update, deposit <em>(mint 흐름은 portfolio가 아니라 여기 있음)</em></td></tr>
+  <tr><td><code>src/components/agent/RedeemModal.tsx</code></td><td>2</td><td>approve, requestRedeem</td></tr>
+  <tr><td><code>src/app/portfolio/[address]/page.tsx</code></td><td>9</td><td>dividend claim / claim-all, redeem cancel / claim, founder approve / deposit / withdraw / carry / wind-down</td></tr>
+  <tr><td><code>src/app/admin/page.tsx</code></td><td>1</td><td>slash</td></tr>
+  <tr><td><code>src/app/agents/[id]/page.tsx</code></td><td>1</td><td>wind-down crank (progressWindDown / settle)</td></tr>
+</table>
+<p><b>합계 18곳.</b> 호출이 들어있던 하위 컴포넌트 중 8곳은 <code>address</code>가 스코프에 없어서 <code>useAccount()</code>를 추가하고 가드에 <code>|| !address</code>를 더해 non-null로 좁힌 뒤 전달했음.</p>
+
+<p>해당 파일들의 <code>writeContractAsync</code> 호출을 한 번에 찾기:</p>
+<pre><code>grep -rn "writeContractAsync" src/ | grep -v "useWriteContract\|}\s*=\s*useWriteContract"
+</code></pre>
+
+<h2>6. 검증</h2>
+
+<ol>
+  <li>패치 후 로컬 dev 환경 (또는 staging) 에서 다음 흐름을 <b>활동 데이터 삭제 없이</b> 연속 실행
+    <ul>
+      <li>agent register 3-5회 연속</li>
+      <li>mint into 같은 agent 3회 연속</li>
+      <li>distribute → claim 흐름</li>
+    </ul>
+  </li>
+  <li>위 흐름에서 "nonce too low" 또는 "replacement underpriced" 가 안 나야 정상</li>
+  <li>Metamask 활동 탭에서 각 tx가 순차적인 nonce 로 들어가는지 확인 (gap 없어야 함)</li>
+</ol>
+
+<div class="check">
+<b>완료 체크리스트</b>
+<ul>
+  <li>☑ <code>src/lib/tx.ts</code> 헬퍼 작성</li>
+  <li>☑ <code>register/page.tsx</code> — approve + registerAgent 2곳 교체</li>
+  <li>☑ <code>MintModal.tsx</code> (3) · <code>RedeemModal.tsx</code> (2) 교체</li>
+  <li>☑ <code>portfolio/[address]/page.tsx</code> — 9곳 교체 (claim / claim-all / cancel / redeem-claim / founder 5종)</li>
+  <li>☑ <code>admin/page.tsx</code> slash · <code>agents/[id]/page.tsx</code> wind-down crank 교체</li>
+  <li>☑ 타입체크 + 빌드 통과 (<code>tsc --noEmit</code> 0 · <code>pnpm build</code> 0 · 신규 <code>tx.ts</code> eslint 0)</li>
+  <li>☐ 연속 흐름 실지갑 검증 (활동 데이터 삭제 없이 통과) — dev 서버 + MetaMask 필요</li>
+  <li>☐ 운영 배포 (커밋 / 푸시 대기)</li>
+</ul>
+</div>
+
+<h2>7. 시간 임계점 (데모 일정)</h2>
+
+<p>데모 본방 전까지 패치 + 배포 완료 필요. 패치 안 들어가면 시연 중 사용자가 매번 self-transfer 워밍업을 해야 해서 흐름이 끊김. 데모 영상 녹화 / 실시간 시연 모두 영향.</p>
+
+<h2>8. 참고 / 보너스</h2>
+
+<ul>
+  <li>같은 패턴은 Mantle Sepolia 외 다른 신생 L2 testnet (Base Sepolia, Optimism Sepolia 등) 에서도 wagmi + Metamask 조합에서 자주 보고됨.</li>
+  <li><code>blockTag: "pending"</code> + retry 는 wagmi 공식 문서 및 viem 가이드의 권장 패턴.</li>
+  <li>Rabby wallet은 매 tx마다 chain RPC 직접 조회하는 정책이라 이 이슈가 거의 없음. 하지만 사용자에게 특정 wallet 강제는 어렵기에 FE 코드 변경이 본질 해결.</li>
+  <li>운영(mainnet) 환경에선 RPC 안정성이 더 좋아 발생 빈도는 낮지만, 이 패치는 안전망으로 유지 권장.</li>
+</ul>
+
+</body>
+</html>
