@@ -21,7 +21,6 @@ const NAV: NavItem[] = [
   { href: "/", label: "Marketplace", match: (p) => p === "/" },
   { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },
   { href: "/register", label: "Launch agent", match: (p) => p.startsWith("/register") },
-  { href: "/admin", label: "Admin", match: (p) => p.startsWith("/admin") },
 ];
 
 export function Header() {
